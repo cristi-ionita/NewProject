@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,8 +26,20 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 @router.get("/{assignment_id}", response_model=VehicleSessionPageResponse)
 async def get_session_page(
     assignment_id: int,
+    user_code: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ) -> VehicleSessionPageResponse:
+    user_result = await db.execute(
+        select(User).where(User.unique_code == user_code.strip())
+    )
+    user = user_result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
     assignment_result = await db.execute(
         select(VehicleAssignment).where(VehicleAssignment.id == assignment_id)
     )
@@ -37,6 +49,12 @@ async def get_session_page(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Session not found.",
+        )
+
+    if assignment.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nu ai voie să accesezi această sesiune.",
         )
 
     await db.refresh(assignment, attribute_names=["user", "vehicle"])
@@ -64,6 +82,57 @@ async def get_session_page(
             previous_session_ended_at=previous_assignment.ended_at,
         )
 
+    report_result = await db.execute(
+        select(VehicleHandoverReport).where(
+            VehicleHandoverReport.assignment_id == assignment_id
+        )
+    )
+    report = report_result.scalar_one_or_none()
+
+    handover_start_data = None
+    handover_end_data = None
+
+    if report is not None:
+        handover_start_completed = (
+            report.mileage_start is not None
+            or report.dashboard_warnings_start is not None
+            or report.damage_notes_start is not None
+            or report.notes_start is not None
+            or report.has_documents
+            or report.has_medkit
+            or report.has_extinguisher
+            or report.has_warning_triangle
+            or report.has_spare_wheel
+        )
+
+        handover_end_completed = (
+            report.mileage_end is not None
+            or report.dashboard_warnings_end is not None
+            or report.damage_notes_end is not None
+            or report.notes_end is not None
+        )
+
+        handover_start_data = {
+            "mileage_start": report.mileage_start,
+            "dashboard_warnings_start": report.dashboard_warnings_start,
+            "damage_notes_start": report.damage_notes_start,
+            "notes_start": report.notes_start,
+            "has_documents": report.has_documents,
+            "has_medkit": report.has_medkit,
+            "has_extinguisher": report.has_extinguisher,
+            "has_warning_triangle": report.has_warning_triangle,
+            "has_spare_wheel": report.has_spare_wheel,
+            "is_completed": handover_start_completed,
+        }
+
+        handover_end_data = {
+            "mileage_end": report.mileage_end,
+            "dashboard_warnings_end": report.dashboard_warnings_end,
+            "damage_notes_end": report.damage_notes_end,
+            "notes_end": report.notes_end,
+            "is_completed": handover_end_completed,
+        }
+
     return VehicleSessionPageResponse(
         session=CurrentSessionSchema(
             assignment_id=assignment.id,
@@ -87,6 +156,8 @@ async def get_session_page(
             current_mileage=assignment.vehicle.current_mileage,
         ),
         previous_handover_report=previous_report_data,
+        handover_start=handover_start_data,
+        handover_end=handover_end_data,
     )
 
 
@@ -110,12 +181,52 @@ async def save_handover_start(
             detail="Session not found.",
         )
 
+    user_result = await db.execute(
+        select(User).where(User.unique_code == payload.user_code.strip())
+    )
+    user = user_result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    if assignment.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nu ai voie să modifici această sesiune.",
+        )
+
     report_result = await db.execute(
         select(VehicleHandoverReport).where(
             VehicleHandoverReport.assignment_id == assignment_id
         )
     )
     report = report_result.scalar_one_or_none()
+
+    if report is not None and (
+        report.mileage_start is not None
+        or report.dashboard_warnings_start is not None
+        or report.damage_notes_start is not None
+        or report.notes_start is not None
+        or report.has_documents
+        or report.has_medkit
+        or report.has_extinguisher
+        or report.has_warning_triangle
+        or report.has_spare_wheel
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Datele de preluare au fost deja salvate și nu mai pot fi modificate.",
+        )
+    
+    await db.refresh(assignment, attribute_names=["vehicle"])
+    if payload.mileage_start < assignment.vehicle.current_mileage:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kilometrii la preluare nu pot fi mai mici decât kilometrii curenți ai mașinii.",
+        )
 
     if report is None:
         report = VehicleHandoverReport(
@@ -170,6 +281,23 @@ async def save_handover_end(
             detail="Session not found.",
         )
 
+    user_result = await db.execute(
+        select(User).where(User.unique_code == payload.user_code.strip())
+    )
+    user = user_result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    if assignment.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Nu ai voie să modifici această sesiune.",
+        )
+
     report_result = await db.execute(
         select(VehicleHandoverReport).where(
             VehicleHandoverReport.assignment_id == assignment_id
@@ -182,6 +310,18 @@ async def save_handover_end(
             assignment_id=assignment_id,
         )
         db.add(report)
+
+    if report.mileage_start is None:
+        raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Nu poți salva predarea înainte să existe kilometrii de preluare.",
+        )
+
+    if payload.mileage_end < report.mileage_start:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kilometrii la predare nu pot fi mai mici decât kilometrii de la preluare.",
+        )
 
     report.mileage_end = payload.mileage_end
     report.dashboard_warnings_end = payload.dashboard_warnings_end

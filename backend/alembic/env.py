@@ -11,6 +11,7 @@ from app.db.models.user import User
 from app.db.models.vehicle import Vehicle
 from app.db.models.vehicle_assignment import VehicleAssignment
 from app.db.models.vehicle_handover_report import VehicleHandoverReport
+from app.db.models.vehicle_issue import VehicleIssue
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

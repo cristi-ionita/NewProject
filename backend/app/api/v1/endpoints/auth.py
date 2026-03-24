@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from datetime import datetime, timezone
+from app.db.models.vehicle_handover_report import VehicleHandoverReport
 from app.core.config import settings
 from app.db.models.user import User
 from app.db.models.vehicle import Vehicle
@@ -233,6 +235,35 @@ async def end_session(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No active vehicle session found for this user.",
+        )
+
+    report_result = await db.execute(
+        select(VehicleHandoverReport).where(
+            VehicleHandoverReport.assignment_id == active_assignment.id
+        )
+    )
+    report = report_result.scalar_one_or_none()
+
+    if report is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nu poți preda mașina fără să completezi datele de predare.",
+        )
+
+    handover_end_completed = (
+        report.mileage_end is not None
+        and report.dashboard_warnings_end is not None
+        and report.dashboard_warnings_end.strip() != ""
+        and report.damage_notes_end is not None
+        and report.damage_notes_end.strip() != ""
+        and report.notes_end is not None
+        and report.notes_end.strip() != ""
+    )
+
+    if not handover_end_completed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Completează toate datele de predare înainte să predai mașina.",
         )
 
     active_assignment.status = AssignmentStatus.CLOSED

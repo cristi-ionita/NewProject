@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 type UserOption = {
   id: number;
@@ -32,8 +33,22 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   useEffect(() => {
+    const adminToken = localStorage.getItem("adminToken");
+    const authUserCode = localStorage.getItem("authUserCode");
+
+    if (adminToken) {
+      navigate("/admin", { replace: true });
+      return;
+    }
+
+    if (authUserCode) {
+      navigate("/user", { replace: true });
+      return;
+    }
+
     const fetchUsers = async () => {
       try {
         const response = await fetch(
@@ -42,18 +57,18 @@ function LoginPage() {
         const data = await response.json();
 
         if (!response.ok) {
-          setError("Nu am putut încărca utilizatorii.");
+          setError(t("couldNotLoadUsers"));
           return;
         }
 
         setUsers(data);
       } catch {
-        setError("Nu mă pot conecta la backend.");
+        setError(t("backendConnectionError"));
       }
     };
 
     fetchUsers();
-  }, []);
+  }, [navigate, t]);
 
   const handleLogin = async () => {
     setError("");
@@ -61,11 +76,10 @@ function LoginPage() {
 
     try {
       if (!selectedValue) {
-        setError("Selectează utilizatorul.");
+        setError(t("selectUser"));
         return;
       }
 
-      // ADMIN LOGIN
       if (selectedValue === "admin") {
         const response = await fetch(
           "http://127.0.0.1:8000/api/v1/auth/admin-login",
@@ -80,14 +94,13 @@ function LoginPage() {
           }
         );
 
-        const data: AdminLoginResponse | ErrorResponse =
-          await response.json();
+        const data: AdminLoginResponse | ErrorResponse = await response.json();
 
         if (!response.ok) {
           if ("detail" in data && typeof data.detail === "string") {
             setError(data.detail);
           } else {
-            setError("Parola admin greșită.");
+            setError(t("wrongAdminPassword"));
           }
           return;
         }
@@ -97,24 +110,21 @@ function LoginPage() {
           localStorage.removeItem("authUserCode");
           localStorage.removeItem("authUserName");
           localStorage.removeItem("authShiftNumber");
-          navigate("/admin/users");
+          navigate("/admin", { replace: true });
         }
 
         return;
       }
 
-      // USER LOGIN
       if (!pin.trim()) {
-        setError("Introdu PIN-ul.");
+        setError(t("enterPin"));
         return;
       }
 
-      const selectedUser = users.find(
-        (u) => u.unique_code === selectedValue
-      );
+      const selectedUser = users.find((u) => u.unique_code === selectedValue);
 
       if (!selectedUser) {
-        setError("Utilizator invalid.");
+        setError(t("invalidUser"));
         return;
       }
 
@@ -138,7 +148,7 @@ function LoginPage() {
         if ("detail" in data && typeof data.detail === "string") {
           setError(data.detail);
         } else {
-          setError("Autentificare eșuată.");
+          setError(t("loginFailed"));
         }
         return;
       }
@@ -148,10 +158,10 @@ function LoginPage() {
         localStorage.setItem("authUserName", data.full_name);
         localStorage.setItem("authShiftNumber", data.shift_number ?? "");
         localStorage.removeItem("adminToken");
-        navigate("/select-vehicle");
+        navigate("/user", { replace: true });
       }
     } catch {
-      setError("Nu mă pot conecta la backend.");
+      setError(t("backendConnectionError"));
     } finally {
       setLoading(false);
     }
@@ -176,7 +186,9 @@ function LoginPage() {
           boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
         }}
       >
-        <h2 style={{ textAlign: "center", marginBottom: "20px" }}>Login</h2>
+        <h2 style={{ textAlign: "center", marginBottom: "20px" }}>
+          {t("login")}
+        </h2>
 
         <select
           value={selectedValue}
@@ -186,12 +198,12 @@ function LoginPage() {
           }}
           style={{ width: "100%", padding: "10px", marginTop: "10px" }}
         >
-          <option value="">Selectează utilizator</option>
-          <option value="admin">Admin</option>
+          <option value="">{t("selectUserOption")}</option>
+          <option value="admin">{t("admin")}</option>
 
           {users.map((u) => (
             <option key={u.unique_code} value={u.unique_code}>
-              {u.full_name} - Tura {u.shift_number}
+              {u.full_name} - {t("shift")} {u.shift_number}
             </option>
           ))}
         </select>
@@ -199,7 +211,7 @@ function LoginPage() {
         {selectedValue === "admin" ? (
           <input
             type="password"
-            placeholder="Parola admin"
+            placeholder={t("adminPassword")}
             value={adminPassword}
             onChange={(e) => setAdminPassword(e.target.value)}
             style={{ width: "100%", padding: "10px", marginTop: "10px" }}
@@ -208,7 +220,7 @@ function LoginPage() {
           selectedValue && (
             <input
               type="password"
-              placeholder="PIN (4 cifre)"
+              placeholder={t("pinPlaceholder")}
               value={pin}
               onChange={(e) => setPin(e.target.value)}
               style={{ width: "100%", padding: "10px", marginTop: "10px" }}
@@ -230,12 +242,10 @@ function LoginPage() {
             cursor: "pointer",
           }}
         >
-          {loading ? "Se conectează..." : "Login"}
+          {loading ? t("connecting") : t("login")}
         </button>
 
-        {error && (
-          <p style={{ color: "red", marginTop: "10px" }}>{error}</p>
-        )}
+        {error && <p style={{ color: "red", marginTop: "10px" }}>{error}</p>}
       </div>
     </div>
   );

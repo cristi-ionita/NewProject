@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 type UserItem = {
   id: number;
@@ -20,6 +21,7 @@ function AdminUsersPage() {
   const [success, setSuccess] = useState("");
 
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const getHeaders = () => {
     const token = localStorage.getItem("adminToken");
@@ -49,14 +51,14 @@ function AdminUsersPage() {
         setError(
           typeof data?.detail === "string"
             ? data.detail
-            : "Nu am putut încărca utilizatorii."
+            : t("couldNotLoadUsers")
         );
         return;
       }
 
       setUsers(data);
     } catch {
-      setError("Nu mă pot conecta la backend.");
+      setError(t("backendConnectionError"));
     }
   };
 
@@ -84,12 +86,12 @@ function AdminUsersPage() {
     setSuccess("");
 
     if (!fullName.trim() || !shiftNumber.trim()) {
-      setError("Completează numele și numărul de tură.");
+      setError(t("fillNameAndShift"));
       return;
     }
 
     if (!editingUserId && !pin.trim()) {
-      setError("PIN-ul este obligatoriu la creare.");
+      setError(t("pinRequiredOnCreate"));
       return;
     }
 
@@ -132,21 +134,19 @@ function AdminUsersPage() {
         setError(
           typeof data?.detail === "string"
             ? data.detail
-            : "Nu am putut salva utilizatorul."
+            : t("couldNotSaveUser")
         );
         return;
       }
 
       setSuccess(
-        editingUserId
-          ? "Utilizator actualizat cu succes."
-          : "Utilizator creat cu succes."
+        editingUserId ? t("userUpdatedSuccessfully") : t("userCreatedSuccessfully")
       );
 
       resetForm();
       fetchUsers();
     } catch {
-      setError("Nu mă pot conecta la backend.");
+      setError(t("backendConnectionError"));
     }
   };
 
@@ -161,9 +161,7 @@ function AdminUsersPage() {
   };
 
   const handleDeactivateUser = async (userId: number) => {
-    const confirmed = window.confirm(
-      "Sigur vrei să dezactivezi acest utilizator?"
-    );
+    const confirmed = window.confirm(t("confirmDeactivateUser"));
 
     if (!confirmed) return;
 
@@ -191,18 +189,18 @@ function AdminUsersPage() {
         setError(
           typeof data?.detail === "string"
             ? data.detail
-            : "Nu am putut dezactiva utilizatorul."
+            : t("couldNotDeactivateUser")
         );
         return;
       }
 
-      setSuccess("Utilizator dezactivat.");
+      setSuccess(t("userDeactivated"));
       if (editingUserId === userId) {
         resetForm();
       }
       fetchUsers();
     } catch {
-      setError("Nu mă pot conecta la backend.");
+      setError(t("backendConnectionError"));
     }
   };
 
@@ -231,15 +229,15 @@ function AdminUsersPage() {
         setError(
           typeof data?.detail === "string"
             ? data.detail
-            : "Nu am putut reactiva utilizatorul."
+            : t("couldNotReactivateUser")
         );
         return;
       }
 
-      setSuccess("Utilizator reactivat.");
+      setSuccess(t("userReactivated"));
       fetchUsers();
     } catch {
-      setError("Nu mă pot conecta la backend.");
+      setError(t("backendConnectionError"));
     }
   };
 
@@ -265,7 +263,22 @@ function AdminUsersPage() {
             marginBottom: "30px",
           }}
         >
-          <h1 style={{ margin: 0 }}>Admin - Utilizatori</h1>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <button
+              onClick={() => navigate("/admin")}
+              style={{
+                background: "#eee",
+                border: "none",
+                padding: "10px 16px",
+                borderRadius: "8px",
+                cursor: "pointer",
+              }}
+            >
+              {t("back")}
+            </button>
+            <h1 style={{ margin: 0 }}>{t("adminUsersTitle")}</h1>
+          </div>
+
           <button
             onClick={handleLogoutAdmin}
             style={{
@@ -276,7 +289,7 @@ function AdminUsersPage() {
               cursor: "pointer",
             }}
           >
-            Logout
+            {t("logout")}
           </button>
         </div>
 
@@ -290,7 +303,7 @@ function AdminUsersPage() {
           }}
         >
           <h3 style={{ marginTop: 0 }}>
-            {editingUserId ? "Modifică utilizator" : "Creează utilizator"}
+            {editingUserId ? t("editUser") : t("createUser")}
           </h3>
 
           <div
@@ -302,24 +315,38 @@ function AdminUsersPage() {
             }}
           >
             <input
-              placeholder="Nume și prenume"
+              placeholder={t("fullName")}
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              style={{ padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }}
+              style={{
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ccc",
+              }}
             />
 
             <input
-              placeholder="Număr tură"
+              placeholder={t("shiftNumber")}
               value={shiftNumber}
               onChange={(e) => setShiftNumber(e.target.value)}
-              style={{ padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }}
+              style={{
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ccc",
+              }}
             />
 
             <input
-              placeholder={editingUserId ? "PIN nou (opțional)" : "PIN 4 cifre"}
+              placeholder={
+                editingUserId ? t("newPinOptional") : t("pin4Digits")
+              }
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              style={{ padding: "10px", borderRadius: "8px", border: "1px solid #ccc" }}
+              style={{
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ccc",
+              }}
             />
 
             <button
@@ -333,7 +360,7 @@ function AdminUsersPage() {
                 cursor: "pointer",
               }}
             >
-              {editingUserId ? "Salvează" : "Creează"}
+              {editingUserId ? t("save") : t("create")}
             </button>
           </div>
 
@@ -351,7 +378,7 @@ function AdminUsersPage() {
                   checked={isActive}
                   onChange={(e) => setIsActive(e.target.checked)}
                 />
-                Utilizator activ
+                {t("activeUser")}
               </label>
 
               <button
@@ -365,7 +392,7 @@ function AdminUsersPage() {
                   cursor: "pointer",
                 }}
               >
-                Renunță
+                {t("cancel")}
               </button>
             </div>
           )}
@@ -392,9 +419,13 @@ function AdminUsersPage() {
               }}
             >
               <div>
-                <strong>{u.full_name}</strong>
-                <div style={{ fontSize: "14px", color: "#666", marginTop: "4px" }}>
-                  Tura {u.shift_number} • {u.is_active ? "Activ" : "Inactiv"}
+                <strong style={{ fontSize: "18px" }}>
+                  {t("shift")} {u.shift_number ?? "-"}
+                </strong>
+                <div
+                  style={{ fontSize: "14px", color: "#666", marginTop: "4px" }}
+                >
+                  {u.full_name} • {u.is_active ? t("active") : t("inactive")}
                 </div>
               </div>
 
@@ -408,7 +439,7 @@ function AdminUsersPage() {
                     cursor: "pointer",
                   }}
                 >
-                  Edit
+                  {t("edit")}
                 </button>
 
                 {u.is_active ? (
@@ -421,7 +452,7 @@ function AdminUsersPage() {
                       cursor: "pointer",
                     }}
                   >
-                    Dezactivează
+                    {t("deactivate")}
                   </button>
                 ) : (
                   <button
@@ -433,7 +464,7 @@ function AdminUsersPage() {
                       cursor: "pointer",
                     }}
                   >
-                    Activează
+                    {t("activate")}
                   </button>
                 )}
               </div>

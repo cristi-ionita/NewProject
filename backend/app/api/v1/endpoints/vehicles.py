@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+import hashlib
 
+from app.core.config import settings
 from app.db.models.vehicle import Vehicle
 from app.db.models.vehicle_assignment import AssignmentStatus, VehicleAssignment
 from app.db.models.vehicle_handover_report import VehicleHandoverReport
 from app.db.session import get_db
-from app.schemas.vehicle import VehicleCreate, VehicleRead
+from app.schemas.vehicle import VehicleCreate, VehicleRead, VehicleUpdate
 from app.schemas.vehicle_history import (
     VehicleHistoryItemSchema,
     VehicleHistoryResponse,
@@ -19,7 +21,30 @@ from app.schemas.vehicle_live_status import (
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
-@router.post("/", response_model=VehicleRead, status_code=status.HTTP_201_CREATED)
+def verify_admin_token(x_admin_token: str | None = Header(default=None)) -> None:
+    if not x_admin_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Lipsește tokenul de admin.",
+        )
+
+    expected_token = hashlib.sha256(
+        f"{settings.ADMIN_PASSWORD}:{settings.ADMIN_TOKEN_SECRET}".encode()
+    ).hexdigest()
+
+    if x_admin_token != expected_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token admin invalid.",
+        )
+
+
+@router.post(
+    "/",
+    response_model=VehicleRead,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_admin_token)],
+)
 async def create_vehicle(
     payload: VehicleCreate,
     db: AsyncSession = Depends(get_db),
@@ -59,12 +84,120 @@ async def create_vehicle(
     return vehicle
 
 
-@router.get("/", response_model=list[VehicleRead])
+@router.get(
+    "/",
+    response_model=list[VehicleRead],
+    dependencies=[Depends(verify_admin_token)],
+)
 async def list_vehicles(
     db: AsyncSession = Depends(get_db),
 ) -> list[Vehicle]:
     result = await db.execute(select(Vehicle).order_by(Vehicle.id.desc()))
     return list(result.scalars().all())
+
+
+@router.put(
+    "/{vehicle_id}",
+    response_model=VehicleRead,
+    dependencies=[Depends(verify_admin_token)],
+)
+async def update_vehicle(
+    vehicle_id: int,
+    payload: VehicleUpdate,
+    db: AsyncSession = Depends(get_db),
+) -> Vehicle:
+    result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
+    vehicle = result.scalar_one_or_none()
+
+    if vehicle is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehicle not found.",
+        )
+
+    if payload.brand is not None:
+        vehicle.brand = payload.brand
+
+    if payload.model is not None:
+        vehicle.model = payload.model
+
+    if payload.license_plate is not None:
+        existing_vehicle = await db.execute(
+            select(Vehicle).where(
+                Vehicle.license_plate == payload.license_plate,
+                Vehicle.id != vehicle_id,
+            )
+        )
+        if existing_vehicle.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A vehicle with this license plate already exists.",
+            )
+        vehicle.license_plate = payload.license_plate
+
+    if payload.year is not None:
+        vehicle.year = payload.year
+
+    if payload.vin is not None:
+        existing_vin = await db.execute(
+            select(Vehicle).where(
+                Vehicle.vin == payload.vin,
+                Vehicle.id != vehicle_id,
+            )
+        )
+        if payload.vin and existing_vin.scalar_one_or_none() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A vehicle with this VIN already exists.",
+            )
+        vehicle.vin = payload.vin
+
+    if payload.status is not None:
+        vehicle.status = payload.status
+
+    if payload.current_mileage is not None:
+        vehicle.current_mileage = payload.current_mileage
+
+    await db.commit()
+    await db.refresh(vehicle)
+    return vehicle
+
+
+@router.delete(
+    "/{vehicle_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(verify_admin_token)],
+)
+async def delete_vehicle(
+    vehicle_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
+    vehicle = result.scalar_one_or_none()
+
+    if vehicle is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehicle not found.",
+        )
+
+    # 🔒 CHECK IMPORTANT
+    active_assignment_result = await db.execute(
+        select(VehicleAssignment).where(
+            VehicleAssignment.vehicle_id == vehicle_id,
+            VehicleAssignment.status == AssignmentStatus.ACTIVE,
+        )
+    )
+    active_assignment = active_assignment_result.scalar_one_or_none()
+
+    if active_assignment is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nu poți șterge mașina. Este în uz.",
+        )
+
+    await db.delete(vehicle)
+    await db.commit()
 
 
 @router.get("/live-status", response_model=VehicleLiveStatusResponse)
@@ -95,6 +228,7 @@ async def get_vehicles_live_status(
 
         assigned_to_user_id = None
         assigned_to_name = None
+        assigned_to_shift_number = None
         active_assignment_id = None
         availability = "free"
 
@@ -102,6 +236,7 @@ async def get_vehicles_live_status(
             await db.refresh(active_assignment, attribute_names=["user"])
             assigned_to_user_id = active_assignment.user.id
             assigned_to_name = active_assignment.user.full_name
+            assigned_to_shift_number = active_assignment.user.shift_number
             active_assignment_id = active_assignment.id
             availability = "occupied"
 
@@ -118,6 +253,7 @@ async def get_vehicles_live_status(
                 availability=availability,
                 assigned_to_user_id=assigned_to_user_id,
                 assigned_to_name=assigned_to_name,
+                assigned_to_shift_number=assigned_to_shift_number,
                 active_assignment_id=active_assignment_id,
             )
         )

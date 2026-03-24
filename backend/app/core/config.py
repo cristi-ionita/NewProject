@@ -7,10 +7,10 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
-    DB_NAME: str = "app_db"
-    DB_USER: str = "app_user"
-    DB_PASSWORD: str = "app_pass"
+    DB_PORT: int = 5433
+    DB_NAME: str = "cars_db"
+    DB_USER: str = "postgres"
+    DB_PASSWORD: str = "12345"
 
     ADMIN_PASSWORD: str = "admin123"
     ADMIN_TOKEN_SECRET: str = "super-secret-admin-token-key"

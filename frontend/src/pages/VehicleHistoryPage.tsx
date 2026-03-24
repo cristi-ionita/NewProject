@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 type VehicleHistoryItem = {
   assignment_id: number;
@@ -30,7 +31,11 @@ function VehicleHistoryPage() {
   const { vehicleId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const returnToSessionId = location.state?.returnToSessionId as number | undefined;
+  const { t } = useTranslation();
+
+  const returnToSessionId = location.state?.returnToSessionId as
+    | number
+    | undefined;
 
   const [data, setData] = useState<VehicleHistoryResponse | null>(null);
   const [error, setError] = useState("");
@@ -51,7 +56,7 @@ function VehicleHistoryPage() {
         const json = await res.json();
 
         if (!res.ok) {
-          throw new Error(json.detail || "A apărut o eroare.");
+          throw new Error(json.detail || t("genericError"));
         }
 
         return json;
@@ -65,18 +70,22 @@ function VehicleHistoryPage() {
       .finally(() => {
         setLoading(false);
       });
-  }, [vehicleId, navigate, userCode]);
+  }, [vehicleId, navigate, userCode, t]);
 
   if (loading) {
-    return <div className="container">Se încarcă istoricul...</div>;
+    return <div className="container">{t("loadingHistory")}</div>;
   }
 
   if (error) {
-    return <div className="container">Eroare: {error}</div>;
+    return (
+      <div className="container">
+        {t("error")}: {error}
+      </div>
+    );
   }
 
   if (!data) {
-    return <div className="container">Nu există date.</div>;
+    return <div className="container">{t("noData")}</div>;
   }
 
   return (
@@ -87,47 +96,93 @@ function VehicleHistoryPage() {
             to={`/session/${returnToSessionId}`}
             style={{ textDecoration: "none" }}
           >
-            ← Înapoi la sesiunea curentă
+            ← {t("backToCurrentSession")}
           </Link>
         ) : (
-          <span>Istoric vehicul</span>
+          <span>{t("vehicleHistory")}</span>
         )}
       </div>
 
-      <h1>Istoric vehicul</h1>
+      <h1>{t("vehicleHistory")}</h1>
       <p>
-        <strong>ID vehicul:</strong> {data.vehicle_id}
+        <strong>{t("vehicleId")}:</strong> {data.vehicle_id}
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {data.history.map((item) => (
           <div key={item.assignment_id} className="card">
-            <h2>Sesiunea #{item.assignment_id}</h2>
-            <p><strong>Șofer:</strong> {item.driver_name}</p>
-            <p><strong>Start:</strong> {item.started_at}</p>
-            <p><strong>End:</strong> {item.ended_at ?? "-"}</p>
+            <h2>
+              {t("session")} #{item.assignment_id}
+            </h2>
+
+            <p>
+              <strong>{t("driver")}:</strong> {item.driver_name}
+            </p>
+            <p>
+              <strong>{t("start")}:</strong> {item.started_at}
+            </p>
+            <p>
+              <strong>{t("end")}:</strong> {item.ended_at ?? "-"}
+            </p>
 
             <hr />
 
-            <p><strong>Km preluare:</strong> {item.mileage_start ?? "-"}</p>
-            <p><strong>Km predare:</strong> {item.mileage_end ?? "-"}</p>
+            <p>
+              <strong>{t("pickupMileage")}:</strong> {item.mileage_start ?? "-"}
+            </p>
+            <p>
+              <strong>{t("returnMileageHistory")}:</strong>{" "}
+              {item.mileage_end ?? "-"}
+            </p>
 
-            <p><strong>Martori bord la preluare:</strong> {item.dashboard_warnings_start ?? "-"}</p>
-            <p><strong>Martori bord la predare:</strong> {item.dashboard_warnings_end ?? "-"}</p>
+            <p>
+              <strong>{t("dashboardWarningsPickup")}:</strong>{" "}
+              {item.dashboard_warnings_start ?? "-"}
+            </p>
+            <p>
+              <strong>{t("dashboardWarningsReturnHistory")}:</strong>{" "}
+              {item.dashboard_warnings_end ?? "-"}
+            </p>
 
-            <p><strong>Daune la preluare:</strong> {item.damage_notes_start ?? "-"}</p>
-            <p><strong>Daune la predare:</strong> {item.damage_notes_end ?? "-"}</p>
+            <p>
+              <strong>{t("damagePickup")}:</strong>{" "}
+              {item.damage_notes_start ?? "-"}
+            </p>
+            <p>
+              <strong>{t("damageReturn")}:</strong>{" "}
+              {item.damage_notes_end ?? "-"}
+            </p>
 
-            <p><strong>Observații la preluare:</strong> {item.notes_start ?? "-"}</p>
-            <p><strong>Observații la predare:</strong> {item.notes_end ?? "-"}</p>
+            <p>
+              <strong>{t("notesPickup")}:</strong> {item.notes_start ?? "-"}
+            </p>
+            <p>
+              <strong>{t("notesReturnHistory")}:</strong>{" "}
+              {item.notes_end ?? "-"}
+            </p>
 
             <hr />
 
-            <p><strong>Documente:</strong> {item.has_documents ? "Da" : "Nu"}</p>
-            <p><strong>Trusă medicală:</strong> {item.has_medkit ? "Da" : "Nu"}</p>
-            <p><strong>Stingător:</strong> {item.has_extinguisher ? "Da" : "Nu"}</p>
-            <p><strong>Triunghi:</strong> {item.has_warning_triangle ? "Da" : "Nu"}</p>
-            <p><strong>Roată de rezervă:</strong> {item.has_spare_wheel ? "Da" : "Nu"}</p>
+            <p>
+              <strong>{t("documents")}:</strong>{" "}
+              {item.has_documents ? t("yes") : t("no")}
+            </p>
+            <p>
+              <strong>{t("medicalKit")}:</strong>{" "}
+              {item.has_medkit ? t("yes") : t("no")}
+            </p>
+            <p>
+              <strong>{t("fireExtinguisher")}:</strong>{" "}
+              {item.has_extinguisher ? t("yes") : t("no")}
+            </p>
+            <p>
+              <strong>{t("warningTriangle")}:</strong>{" "}
+              {item.has_warning_triangle ? t("yes") : t("no")}
+            </p>
+            <p>
+              <strong>{t("spareWheel")}:</strong>{" "}
+              {item.has_spare_wheel ? t("yes") : t("no")}
+            </p>
           </div>
         ))}
       </div>

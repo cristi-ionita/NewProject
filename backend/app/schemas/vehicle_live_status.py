@@ -11,6 +11,7 @@ class VehicleLiveStatusItem(BaseModel):
     availability: str
     assigned_to_user_id: int | None = None
     assigned_to_name: str | None = None
+    assigned_to_shift_number: str | None = None
     active_assignment_id: int | None = None
 
 

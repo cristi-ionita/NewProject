@@ -5,6 +5,7 @@ from app.api.v1.endpoints.health import router as health_router
 from app.api.v1.endpoints.sessions import router as sessions_router
 from app.api.v1.endpoints.vehicles import router as vehicles_router
 from app.api.v1.endpoints.users import router as users_router
+from app.api.v1.endpoints.vehicle_issues import router as vehicle_issues_router
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -12,3 +13,4 @@ api_router.include_router(auth_router)
 api_router.include_router(sessions_router)
 api_router.include_router(vehicles_router)
 api_router.include_router(users_router)
+api_router.include_router(vehicle_issues_router)
