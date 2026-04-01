@@ -1,31 +1,19 @@
-# flota
+# CarsManagement Backend
 
-Backend profesional cu:
+Backend-ul aplicației construit cu FastAPI.
+
+## Stack
+
 - FastAPI
-- Poetry
+- SQLAlchemy Async
 - PostgreSQL
-- Docker
-- SQLAlchemy async
 - Alembic
-- Ruff
+- Poetry
 - Pytest
 
-## Pornire locală
+## Setup
 
-### Varianta Docker
 ```bash
-docker compose up --build
-```
-
-### Varianta locală
-```bash
+cd backend
 poetry install
-cp .env.example .env
-poetry run uvicorn app.main:app --reload
-```
-
-## Migrații
-```bash
-poetry run alembic revision --autogenerate -m "init"
-poetry run alembic upgrade head
 ```

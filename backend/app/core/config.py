@@ -6,14 +6,14 @@ class Settings(BaseSettings):
     APP_ENV: str = "dev"
     DEBUG: bool = True
 
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5433
-    DB_NAME: str = "cars_db"
-    DB_USER: str = "postgres"
-    DB_PASSWORD: str = "12345"
+    DB_HOST: str
+    DB_PORT: int
+    DB_NAME: str
+    DB_USER: str
+    DB_PASSWORD: str
 
-    ADMIN_PASSWORD: str = "admin123"
-    ADMIN_TOKEN_SECRET: str = "super-secret-admin-token-key"
+    ADMIN_PASSWORD: str
+    ADMIN_TOKEN_SECRET: str
 
     model_config = SettingsConfigDict(
         env_file=".env",

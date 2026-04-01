@@ -1,24 +1,72 @@
+# ========================
+# Python / Backend
+# ========================
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
-.Python
-.python-version
+*.so
+
+# Virtual env
+.venv/
+venv/
+env/
+
+
+# Pytest
 .pytest_cache/
-.ruff_cache/
 .coverage
 htmlcov/
 
-.env
-.venv/
-dist/
-build/
-*.egg-info/
-
-node_modules/
-frontend/node_modules/
-
+# Alembic cache
 alembic/versions/*.pyc
 
-.idea/
+# ========================
+# Environment files
+# ========================
+.env
+.env.*
+!.env.example
+
+# ========================
+# Logs
+# ========================
+*.log
+
+# ========================
+# VSCode / IDE
+# ========================
 .vscode/
+.idea/
+*.swp
+
+# ========================
+# OS
+# ========================
+.DS_Store
+Thumbs.db
+
+# ========================
+# Node / Frontend
+# ========================
+node_modules/
+dist/
+build/
+.vite/
+
+# ========================
+# TypeScript
+# ========================
+*.tsbuildinfo
+
+# ========================
+# Docker
+# ========================
+*.pid
+*.seed
+*.pid.lock
+
+# ========================
+# Misc
+# ========================
+*.sqlite3

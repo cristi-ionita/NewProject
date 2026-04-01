@@ -1,7 +1,6 @@
 services:
   api:
     build: .
-    container_name: pro_web_api
     env_file:
       - .env
     ports:
@@ -15,17 +14,14 @@ services:
 
   db:
     image: postgres:17
-    container_name: pro_web_db
     environment:
-      POSTGRES_DB: app_db
-      POSTGRES_USER: app_user
-      POSTGRES_PASSWORD: app_pass
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: cars_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12345
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app_user -d app_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cars_db"]
       interval: 5s
       timeout: 5s
       retries: 10

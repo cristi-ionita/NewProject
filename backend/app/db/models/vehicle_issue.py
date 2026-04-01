@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Enum as SqlEnum, ForeignKey, Integer, Text, func
+from sqlalchemy import DateTime, Enum as SqlEnum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -9,6 +9,7 @@ from app.db.base import Base
 
 class VehicleIssueStatus(str, Enum):
     OPEN = "open"
+    SCHEDULED = "scheduled"
     IN_PROGRESS = "in_progress"
     RESOLVED = "resolved"
 
@@ -36,6 +37,12 @@ class VehicleIssue(Base):
         index=True,
     )
 
+    assigned_mechanic_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     need_service_in_km: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     need_brakes: Mapped[bool] = mapped_column(nullable=False, default=False)
@@ -49,6 +56,16 @@ class VehicleIssue(Base):
         SqlEnum(VehicleIssueStatus, name="vehicle_issue_status"),
         default=VehicleIssueStatus.OPEN,
         nullable=False,
+    )
+
+    scheduled_for: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    scheduled_location: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -66,4 +83,11 @@ class VehicleIssue(Base):
 
     vehicle = relationship("Vehicle")
     assignment = relationship("VehicleAssignment")
-    reported_by_user = relationship("User")
+    reported_by_user = relationship(
+        "User",
+        foreign_keys=[reported_by_user_id],
+    )
+    assigned_mechanic = relationship(
+        "User",
+        foreign_keys=[assigned_mechanic_id],
+    )

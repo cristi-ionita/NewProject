@@ -12,7 +12,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir poetry
 
-COPY pyproject.toml README.md /app/
+COPY pyproject.toml poetry.lock README.md /app/
+COPY app /app/app
+COPY alembic /app/alembic
+COPY alembic.ini /app/alembic.ini
+
 RUN poetry install --no-interaction --no-ansi
 
 COPY . /app

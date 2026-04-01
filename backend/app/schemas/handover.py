@@ -1,11 +1,15 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 MAX_REALISTIC_MILEAGE = 5_000_000
 
 
-class HandoverStartRequest(BaseModel):
-    user_code: str = Field(..., min_length=1)
+class BaseSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class HandoverStartRequestSchema(BaseSchema):
+    user_code: str = Field(..., min_length=1, max_length=50)
     mileage_start: int = Field(..., ge=0, le=MAX_REALISTIC_MILEAGE)
     dashboard_warnings_start: str = Field(..., min_length=1)
     damage_notes_start: str = Field(..., min_length=1)
@@ -30,7 +34,7 @@ class HandoverStartRequest(BaseModel):
         return cleaned
 
 
-class HandoverStartResponse(BaseModel):
+class HandoverStartResponseSchema(BaseSchema):
     assignment_id: int
     mileage_start: int
     dashboard_warnings_start: str
@@ -43,8 +47,8 @@ class HandoverStartResponse(BaseModel):
     has_spare_wheel: bool
 
 
-class HandoverEndRequest(BaseModel):
-    user_code: str = Field(..., min_length=1)
+class HandoverEndRequestSchema(BaseSchema):
+    user_code: str = Field(..., min_length=1, max_length=50)
     mileage_end: int = Field(..., ge=0, le=MAX_REALISTIC_MILEAGE)
     dashboard_warnings_end: str = Field(..., min_length=1)
     damage_notes_end: str = Field(..., min_length=1)
@@ -64,7 +68,7 @@ class HandoverEndRequest(BaseModel):
         return cleaned
 
 
-class HandoverEndResponse(BaseModel):
+class HandoverEndResponseSchema(BaseSchema):
     assignment_id: int
     mileage_end: int
     dashboard_warnings_end: str

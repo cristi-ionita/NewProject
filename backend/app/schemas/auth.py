@@ -1,21 +1,50 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class LoginRequest(BaseModel):
-    unique_code: str
-    pin: str
+class BaseSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
-class LoginResponse(BaseModel):
+class LoginRequestSchema(BaseSchema):
+    identifier: str = Field(..., min_length=1, max_length=50)
+    pin: str = Field(..., min_length=4, max_length=4)
+
+    @field_validator("identifier", mode="before")
+    @classmethod
+    def validate_identifier(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("User is required.")
+        return cleaned
+
+    @field_validator("pin", mode="before")
+    @classmethod
+    def validate_pin(cls, value: str) -> str:
+        cleaned = value.strip()
+
+        if not cleaned:
+            raise ValueError("PIN is required.")
+
+        if len(cleaned) != 4:
+            raise ValueError("PIN must be exactly 4 digits.")
+
+        if not cleaned.isdigit():
+            raise ValueError("PIN must contain only digits.")
+
+        return cleaned
+
+
+class LoginResponseSchema(BaseSchema):
     user_id: int
     full_name: str
     shift_number: str | None = None
     unique_code: str
+    role: str
 
 
-class ActiveSessionResponse(BaseModel):
+class ActiveSessionResponseSchema(BaseSchema):
     has_active_session: bool
     assignment_id: int | None = None
     vehicle_id: int | None = None
@@ -26,12 +55,28 @@ class ActiveSessionResponse(BaseModel):
     status: str | None = None
 
 
-class StartSessionRequest(BaseModel):
-    code: str
-    license_plate: str
+class StartSessionRequestSchema(BaseSchema):
+    code: str = Field(..., min_length=1, max_length=50)
+    license_plate: str = Field(..., min_length=1, max_length=20)
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("User code is required.")
+        return cleaned
+
+    @field_validator("license_plate", mode="before")
+    @classmethod
+    def validate_license_plate(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("License plate is required.")
+        return cleaned
 
 
-class StartSessionResponse(BaseModel):
+class StartSessionResponseSchema(BaseSchema):
     assignment_id: int
     user_id: int
     user_name: str
@@ -40,14 +85,20 @@ class StartSessionResponse(BaseModel):
     started_at: datetime
     status: str
 
-    model_config = ConfigDict(from_attributes=True)
+
+class EndSessionRequestSchema(BaseSchema):
+    code: str = Field(..., min_length=1, max_length=50)
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("User code is required.")
+        return cleaned
 
 
-class EndSessionRequest(BaseModel):
-    code: str
-
-
-class EndSessionResponse(BaseModel):
+class EndSessionResponseSchema(BaseSchema):
     assignment_id: int
     user_id: int
     vehicle_id: int

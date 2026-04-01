@@ -6,8 +6,8 @@ from app.core.config import settings
 
 engine = create_async_engine(
     settings.database_url,
-    echo=settings.DEBUG,
-    future=True,
+    echo=False,
+    pool_pre_ping=True,
 )
 
 SessionLocal = async_sessionmaker(
@@ -19,4 +19,7 @@ SessionLocal = async_sessionmaker(
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as session:
-        yield session
+        try:
+            yield session
+        finally:
+            await session.close()

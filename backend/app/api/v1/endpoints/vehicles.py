@@ -1,307 +1,243 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-import hashlib
 
-from app.core.config import settings
+from app.api.v1.dependencies import get_current_admin
 from app.db.models.vehicle import Vehicle
 from app.db.models.vehicle_assignment import AssignmentStatus, VehicleAssignment
 from app.db.models.vehicle_handover_report import VehicleHandoverReport
 from app.db.session import get_db
-from app.schemas.vehicle import VehicleCreate, VehicleRead, VehicleUpdate
+from app.schemas.vehicle import (
+    VehicleCreateSchema,
+    VehicleReadSchema,
+    VehicleUpdateSchema,
+)
 from app.schemas.vehicle_history import (
     VehicleHistoryItemSchema,
-    VehicleHistoryResponse,
+    VehicleHistoryResponseSchema,
 )
 from app.schemas.vehicle_live_status import (
-    VehicleLiveStatusItem,
-    VehicleLiveStatusResponse,
+    VehicleLiveStatusItemSchema,
+    VehicleLiveStatusResponseSchema,
 )
 
 router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 
-def verify_admin_token(x_admin_token: str | None = Header(default=None)) -> None:
-    if not x_admin_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Lipsește tokenul de admin.",
-        )
+# =========================
+# HELPERS
+# =========================
 
-    expected_token = hashlib.sha256(
-        f"{settings.ADMIN_PASSWORD}:{settings.ADMIN_TOKEN_SECRET}".encode()
-    ).hexdigest()
-
-    if x_admin_token != expected_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token admin invalid.",
-        )
-
-
-@router.post(
-    "/",
-    response_model=VehicleRead,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(verify_admin_token)],
-)
-async def create_vehicle(
-    payload: VehicleCreate,
-    db: AsyncSession = Depends(get_db),
-) -> Vehicle:
-    existing_vehicle = await db.execute(
-        select(Vehicle).where(Vehicle.license_plate == payload.license_plate)
-    )
-    if existing_vehicle.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A vehicle with this license plate already exists.",
-        )
-
-    if payload.vin:
-        existing_vin = await db.execute(
-            select(Vehicle).where(Vehicle.vin == payload.vin)
-        )
-        if existing_vin.scalar_one_or_none() is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A vehicle with this VIN already exists.",
-            )
-
-    vehicle = Vehicle(
-        brand=payload.brand,
-        model=payload.model,
-        license_plate=payload.license_plate,
-        year=payload.year,
-        vin=payload.vin,
-        status=payload.status,
-        current_mileage=payload.current_mileage,
-    )
-
-    db.add(vehicle)
-    await db.commit()
-    await db.refresh(vehicle)
-    return vehicle
-
-
-@router.get(
-    "/",
-    response_model=list[VehicleRead],
-    dependencies=[Depends(verify_admin_token)],
-)
-async def list_vehicles(
-    db: AsyncSession = Depends(get_db),
-) -> list[Vehicle]:
-    result = await db.execute(select(Vehicle).order_by(Vehicle.id.desc()))
-    return list(result.scalars().all())
-
-
-@router.put(
-    "/{vehicle_id}",
-    response_model=VehicleRead,
-    dependencies=[Depends(verify_admin_token)],
-)
-async def update_vehicle(
-    vehicle_id: int,
-    payload: VehicleUpdate,
-    db: AsyncSession = Depends(get_db),
-) -> Vehicle:
+async def get_vehicle_or_404(db: AsyncSession, vehicle_id: int) -> Vehicle:
     result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
     vehicle = result.scalar_one_or_none()
 
-    if vehicle is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Vehicle not found.",
-        )
+    if not vehicle:
+        raise HTTPException(404, "Vehicle not found.")
 
-    if payload.brand is not None:
-        vehicle.brand = payload.brand
-
-    if payload.model is not None:
-        vehicle.model = payload.model
-
-    if payload.license_plate is not None:
-        existing_vehicle = await db.execute(
-            select(Vehicle).where(
-                Vehicle.license_plate == payload.license_plate,
-                Vehicle.id != vehicle_id,
-            )
-        )
-        if existing_vehicle.scalar_one_or_none() is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A vehicle with this license plate already exists.",
-            )
-        vehicle.license_plate = payload.license_plate
-
-    if payload.year is not None:
-        vehicle.year = payload.year
-
-    if payload.vin is not None:
-        existing_vin = await db.execute(
-            select(Vehicle).where(
-                Vehicle.vin == payload.vin,
-                Vehicle.id != vehicle_id,
-            )
-        )
-        if payload.vin and existing_vin.scalar_one_or_none() is not None:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="A vehicle with this VIN already exists.",
-            )
-        vehicle.vin = payload.vin
-
-    if payload.status is not None:
-        vehicle.status = payload.status
-
-    if payload.current_mileage is not None:
-        vehicle.current_mileage = payload.current_mileage
-
-    await db.commit()
-    await db.refresh(vehicle)
     return vehicle
 
 
-@router.delete(
-    "/{vehicle_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(verify_admin_token)],
-)
-async def delete_vehicle(
+async def ensure_unique_license_plate(
+    db: AsyncSession,
+    license_plate: str,
+    exclude_vehicle_id: int | None = None,
+):
+    query = select(Vehicle).where(Vehicle.license_plate == license_plate)
+
+    if exclude_vehicle_id:
+        query = query.where(Vehicle.id != exclude_vehicle_id)
+
+    if (await db.execute(query)).scalar_one_or_none():
+        raise HTTPException(400, "License plate already exists.")
+
+
+async def ensure_unique_vin(
+    db: AsyncSession,
+    vin: str,
+    exclude_vehicle_id: int | None = None,
+):
+    query = select(Vehicle).where(Vehicle.vin == vin)
+
+    if exclude_vehicle_id:
+        query = query.where(Vehicle.id != exclude_vehicle_id)
+
+    if (await db.execute(query)).scalar_one_or_none():
+        raise HTTPException(400, "VIN already exists.")
+
+
+async def get_active_assignment_for_vehicle(
+    db: AsyncSession,
     vehicle_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> None:
-    result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
-    vehicle = result.scalar_one_or_none()
-
-    if vehicle is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Vehicle not found.",
-        )
-
-    # 🔒 CHECK IMPORTANT
-    active_assignment_result = await db.execute(
+) -> VehicleAssignment | None:
+    result = await db.execute(
         select(VehicleAssignment).where(
             VehicleAssignment.vehicle_id == vehicle_id,
             VehicleAssignment.status == AssignmentStatus.ACTIVE,
         )
     )
-    active_assignment = active_assignment_result.scalar_one_or_none()
+    return result.scalar_one_or_none()
 
-    if active_assignment is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nu poți șterge mașina. Este în uz.",
+
+async def get_handover_report(
+    db: AsyncSession,
+    assignment_id: int,
+) -> VehicleHandoverReport | None:
+    result = await db.execute(
+        select(VehicleHandoverReport).where(
+            VehicleHandoverReport.assignment_id == assignment_id
         )
+    )
+    return result.scalar_one_or_none()
+
+
+def build_vehicle_live_status_item(
+    vehicle: Vehicle,
+    assignment: VehicleAssignment | None,
+) -> VehicleLiveStatusItemSchema:
+    return VehicleLiveStatusItemSchema(
+        vehicle_id=vehicle.id,
+        brand=vehicle.brand,
+        model=vehicle.model,
+        license_plate=vehicle.license_plate,
+        year=vehicle.year,
+        vehicle_status=vehicle.status.value,
+        availability="occupied" if assignment else "free",
+        assigned_to_user_id=assignment.user.id if assignment else None,
+        assigned_to_name=assignment.user.full_name if assignment else None,
+        assigned_to_shift_number=assignment.user.shift_number if assignment else None,
+        active_assignment_id=assignment.id if assignment else None,
+    )
+
+
+# =========================
+# ENDPOINTS
+# =========================
+
+@router.post("", response_model=VehicleReadSchema, status_code=201)
+async def create_vehicle(
+    payload: VehicleCreateSchema,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(get_current_admin),
+):
+    await ensure_unique_license_plate(db, payload.license_plate)
+
+    if payload.vin:
+        await ensure_unique_vin(db, payload.vin)
+
+    vehicle = Vehicle(**payload.model_dump())
+
+    db.add(vehicle)
+    await db.commit()
+    await db.refresh(vehicle)
+
+    return VehicleReadSchema.model_validate(vehicle)
+
+
+@router.get("", response_model=list[VehicleReadSchema])
+async def list_vehicles(
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(get_current_admin),
+):
+    result = await db.execute(select(Vehicle).order_by(Vehicle.id.desc()))
+    return [VehicleReadSchema.model_validate(v) for v in result.scalars().all()]
+
+
+@router.put("/{vehicle_id}", response_model=VehicleReadSchema)
+async def update_vehicle(
+    vehicle_id: int,
+    payload: VehicleUpdateSchema,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(get_current_admin),
+):
+    vehicle = await get_vehicle_or_404(db, vehicle_id)
+
+    data = payload.model_dump(exclude_unset=True)
+
+    if "license_plate" in data:
+        await ensure_unique_license_plate(db, data["license_plate"], vehicle_id)
+
+    if "vin" in data and data["vin"]:
+        await ensure_unique_vin(db, data["vin"], vehicle_id)
+
+    for field, value in data.items():
+        setattr(vehicle, field, value)
+
+    await db.commit()
+    await db.refresh(vehicle)
+
+    return VehicleReadSchema.model_validate(vehicle)
+
+
+@router.delete("/{vehicle_id}", status_code=204)
+async def delete_vehicle(
+    vehicle_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(get_current_admin),
+):
+    vehicle = await get_vehicle_or_404(db, vehicle_id)
+
+    if await get_active_assignment_for_vehicle(db, vehicle_id):
+        raise HTTPException(400, "Nu poți șterge mașina. Este în uz.")
 
     await db.delete(vehicle)
     await db.commit()
 
+    return Response(status_code=204)
 
-@router.get("/live-status", response_model=VehicleLiveStatusResponse)
-async def get_vehicles_live_status(
-    db: AsyncSession = Depends(get_db),
-) -> VehicleLiveStatusResponse:
-    vehicles_result = await db.execute(
-        select(Vehicle).order_by(Vehicle.license_plate.asc())
-    )
-    vehicles = list(vehicles_result.scalars().all())
 
-    active_assignments_result = await db.execute(
+@router.get("/live-status", response_model=VehicleLiveStatusResponseSchema)
+async def get_live_status(db: AsyncSession = Depends(get_db)):
+    vehicles = (await db.execute(
+        select(Vehicle).order_by(Vehicle.license_plate)
+    )).scalars().all()
+
+    assignments = (await db.execute(
         select(VehicleAssignment)
         .where(VehicleAssignment.status == AssignmentStatus.ACTIVE)
         .order_by(VehicleAssignment.started_at.desc())
+    )).scalars().all()
+
+    active_map: dict[int, VehicleAssignment] = {}
+
+    for a in assignments:
+        if a.vehicle_id not in active_map:
+            await db.refresh(a, ["user"])
+            active_map[a.vehicle_id] = a
+
+    return VehicleLiveStatusResponseSchema(
+        vehicles=[
+            build_vehicle_live_status_item(v, active_map.get(v.id))
+            for v in vehicles
+        ]
     )
-    active_assignments = list(active_assignments_result.scalars().all())
-
-    active_by_vehicle_id: dict[int, VehicleAssignment] = {}
-    for assignment in active_assignments:
-        if assignment.vehicle_id not in active_by_vehicle_id:
-            active_by_vehicle_id[assignment.vehicle_id] = assignment
-
-    response_items: list[VehicleLiveStatusItem] = []
-
-    for vehicle in vehicles:
-        active_assignment = active_by_vehicle_id.get(vehicle.id)
-
-        assigned_to_user_id = None
-        assigned_to_name = None
-        assigned_to_shift_number = None
-        active_assignment_id = None
-        availability = "free"
-
-        if active_assignment is not None:
-            await db.refresh(active_assignment, attribute_names=["user"])
-            assigned_to_user_id = active_assignment.user.id
-            assigned_to_name = active_assignment.user.full_name
-            assigned_to_shift_number = active_assignment.user.shift_number
-            active_assignment_id = active_assignment.id
-            availability = "occupied"
-
-        response_items.append(
-            VehicleLiveStatusItem(
-                vehicle_id=vehicle.id,
-                brand=vehicle.brand,
-                model=vehicle.model,
-                license_plate=vehicle.license_plate,
-                year=vehicle.year,
-                vehicle_status=vehicle.status.value
-                if hasattr(vehicle.status, "value")
-                else str(vehicle.status),
-                availability=availability,
-                assigned_to_user_id=assigned_to_user_id,
-                assigned_to_name=assigned_to_name,
-                assigned_to_shift_number=assigned_to_shift_number,
-                active_assignment_id=active_assignment_id,
-            )
-        )
-
-    return VehicleLiveStatusResponse(vehicles=response_items)
 
 
-@router.get("/{vehicle_id}/history", response_model=VehicleHistoryResponse)
+@router.get("/{vehicle_id}/history", response_model=VehicleHistoryResponseSchema)
 async def get_vehicle_history(
     vehicle_id: int,
     db: AsyncSession = Depends(get_db),
-) -> VehicleHistoryResponse:
-    vehicle_result = await db.execute(
-        select(Vehicle).where(Vehicle.id == vehicle_id)
-    )
-    vehicle = vehicle_result.scalar_one_or_none()
+):
+    vehicle = await get_vehicle_or_404(db, vehicle_id)
 
-    if vehicle is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Vehicle not found.",
-        )
-
-    assignments_result = await db.execute(
+    assignments = (await db.execute(
         select(VehicleAssignment)
         .where(VehicleAssignment.vehicle_id == vehicle_id)
         .order_by(desc(VehicleAssignment.started_at))
-    )
-    assignments = list(assignments_result.scalars().all())
+    )).scalars().all()
 
-    history_items: list[VehicleHistoryItemSchema] = []
+    history = []
 
-    for assignment in assignments:
-        await db.refresh(assignment, attribute_names=["user"])
+    for a in assignments:
+        await db.refresh(a, ["user"])
+        report = await get_handover_report(db, a.id)
 
-        report_result = await db.execute(
-            select(VehicleHandoverReport).where(
-                VehicleHandoverReport.assignment_id == assignment.id
-            )
-        )
-        report = report_result.scalar_one_or_none()
-
-        history_items.append(
+        history.append(
             VehicleHistoryItemSchema(
-                assignment_id=assignment.id,
-                driver_name=assignment.user.full_name,
-                started_at=assignment.started_at,
-                ended_at=assignment.ended_at,
+                assignment_id=a.id,
+                driver_name=a.user.full_name,
+                started_at=a.started_at,
+                ended_at=a.ended_at,
                 mileage_start=report.mileage_start if report else None,
                 mileage_end=report.mileage_end if report else None,
                 dashboard_warnings_start=report.dashboard_warnings_start if report else None,
@@ -318,24 +254,14 @@ async def get_vehicle_history(
             )
         )
 
-    return VehicleHistoryResponse(
-        vehicle_id=vehicle.id,
-        history=history_items,
-    )
+    return VehicleHistoryResponseSchema(vehicle_id=vehicle.id, history=history)
 
 
-@router.get("/{vehicle_id}", response_model=VehicleRead)
+@router.get("/{vehicle_id}", response_model=VehicleReadSchema)
 async def get_vehicle(
     vehicle_id: int,
     db: AsyncSession = Depends(get_db),
-) -> Vehicle:
-    result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
-    vehicle = result.scalar_one_or_none()
-
-    if vehicle is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Vehicle not found.",
-        )
-
-    return vehicle
+):
+    return VehicleReadSchema.model_validate(
+        await get_vehicle_or_404(db, vehicle_id)
+    )

@@ -1,21 +1,25 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class CurrentSessionSchema(BaseModel):
+class BaseSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class CurrentSessionSchema(BaseSchema):
     assignment_id: int
     status: str
     started_at: datetime
 
 
-class CurrentSessionUserSchema(BaseModel):
+class CurrentSessionUserSchema(BaseSchema):
     id: int
     full_name: str
     unique_code: str
 
 
-class CurrentSessionVehicleSchema(BaseModel):
+class CurrentSessionVehicleSchema(BaseSchema):
     id: int
     brand: str
     model: str
@@ -25,27 +29,29 @@ class CurrentSessionVehicleSchema(BaseModel):
     current_mileage: int
 
 
-class PreviousHandoverReportSchema(BaseModel):
+class PreviousHandoverReportSchema(BaseSchema):
     assignment_id: int
     previous_driver_name: str
     previous_session_started_at: datetime
     previous_session_ended_at: datetime | None = None
 
 
-class CurrentHandoverStartSchema(BaseModel):
+class CurrentHandoverStartSchema(BaseSchema):
     mileage_start: int | None = None
     dashboard_warnings_start: str | None = None
     damage_notes_start: str | None = None
     notes_start: str | None = None
+
     has_documents: bool = False
     has_medkit: bool = False
     has_extinguisher: bool = False
     has_warning_triangle: bool = False
     has_spare_wheel: bool = False
+
     is_completed: bool = False
 
 
-class CurrentHandoverEndSchema(BaseModel):
+class CurrentHandoverEndSchema(BaseSchema):
     mileage_end: int | None = None
     dashboard_warnings_end: str | None = None
     damage_notes_end: str | None = None
@@ -53,7 +59,7 @@ class CurrentHandoverEndSchema(BaseModel):
     is_completed: bool = False
 
 
-class VehicleSessionPageResponse(BaseModel):
+class VehicleSessionPageResponseSchema(BaseSchema):
     session: CurrentSessionSchema
     user: CurrentSessionUserSchema
     vehicle: CurrentSessionVehicleSchema
@@ -62,5 +68,5 @@ class VehicleSessionPageResponse(BaseModel):
     handover_end: CurrentHandoverEndSchema | None = None
 
 
-class SessionAccessQuery(BaseModel):
-    user_code: str
+class SessionAccessQuerySchema(BaseSchema):
+    user_code: str = Field(..., min_length=1, max_length=50)
