@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -16,6 +16,7 @@ def now_utc():
 
 
 # ================= CREATE REQUEST =================
+
 
 def test_vehicle_issue_create_request_schema_valid_minimal():
     obj = VehicleIssueCreateRequestSchema(
@@ -126,6 +127,7 @@ def test_vehicle_issue_create_request_schema_extra_forbidden():
 
 # ================= UPDATE REQUEST =================
 
+
 def test_vehicle_issue_update_request_schema_valid_minimal():
     obj = VehicleIssueUpdateRequestSchema()
 
@@ -199,6 +201,7 @@ def test_vehicle_issue_update_request_schema_extra_forbidden():
 
 
 # ================= CREATE RESPONSE =================
+
 
 def test_vehicle_issue_create_response_schema_valid():
     created_at = now_utc()
@@ -286,6 +289,7 @@ def test_vehicle_issue_create_response_schema_extra_forbidden():
 
 
 # ================= LIST ITEM =================
+
 
 def test_vehicle_issue_list_item_schema_valid():
     created_at = now_utc()
@@ -430,3 +434,20 @@ def test_vehicle_issue_list_item_schema_extra_forbidden():
             updated_at=updated_at,
             extra_field="boom",
         )
+
+
+
+
+def test_vehicle_issue_create_schema_allows_none_dashboard_and_other_problems():
+    obj = VehicleIssueCreateRequestSchema(
+        user_code="EMP001",
+        assignment_id=1,
+        dashboard_checks=None,
+        other_problems=None,
+        need_brakes=False,
+        need_tires=False,
+        need_oil=False,
+    )
+
+    assert obj.dashboard_checks is None
+    assert obj.other_problems is None

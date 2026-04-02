@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -68,7 +68,7 @@ def make_assignment(
         user_id=user_id,
         vehicle_id=vehicle_id,
         status=SimpleNamespace(value=status),
-        started_at=started_at or datetime(2026, 3, 30, 8, 0, tzinfo=timezone.utc),
+        started_at=started_at or datetime(2026, 3, 30, 8, 0, tzinfo=UTC),
         ended_at=ended_at,
         user=user,
         vehicle=vehicle,
@@ -312,8 +312,8 @@ async def test_get_session_page_with_previous_assignment_and_report(monkeypatch)
         assignment_id=90,
         user_id=2,
         vehicle_id=10,
-        started_at=datetime(2026, 3, 29, 8, 0, tzinfo=timezone.utc),
-        ended_at=datetime(2026, 3, 29, 18, 0, tzinfo=timezone.utc),
+        started_at=datetime(2026, 3, 29, 8, 0, tzinfo=UTC),
+        ended_at=datetime(2026, 3, 29, 18, 0, tzinfo=UTC),
         user=previous_user,
     )
 

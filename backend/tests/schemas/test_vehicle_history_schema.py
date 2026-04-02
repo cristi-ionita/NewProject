@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -14,6 +14,7 @@ def now_utc():
 
 
 # ================= ITEM =================
+
 
 def test_vehicle_history_item_schema_valid_minimal():
     now = now_utc()
@@ -147,6 +148,7 @@ def test_vehicle_history_item_schema_extra_forbidden():
 
 # ================= RESPONSE =================
 
+
 def test_vehicle_history_response_schema_valid():
     now = now_utc()
 
@@ -199,8 +201,7 @@ def test_vehicle_history_response_schema_invalid_item():
 
 
 def test_vehicle_history_response_schema_required_fields():
-    now = now_utc()
-
+    
     with pytest.raises(ValidationError):
         VehicleHistoryResponseSchema(
             history=[],

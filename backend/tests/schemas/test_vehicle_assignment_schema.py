@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -16,6 +16,7 @@ def now_utc():
 
 
 # ================= CREATE =================
+
 
 def test_vehicle_assignment_create_request_schema_valid():
     obj = VehicleAssignmentCreateRequestSchema(
@@ -53,6 +54,7 @@ def test_vehicle_assignment_create_request_schema_extra_forbidden():
 
 
 # ================= READ =================
+
 
 def test_vehicle_assignment_read_schema_valid():
     now = now_utc()
@@ -178,6 +180,7 @@ def test_vehicle_assignment_read_schema_extra_forbidden():
 
 # ================= LIST =================
 
+
 def test_vehicle_assignment_list_response_schema_valid():
     now = now_utc()
 
@@ -238,6 +241,7 @@ def test_vehicle_assignment_list_response_schema_extra_forbidden():
 
 
 # ================= CLOSE =================
+
 
 def test_vehicle_assignment_close_response_schema_valid():
     ended = now_utc()

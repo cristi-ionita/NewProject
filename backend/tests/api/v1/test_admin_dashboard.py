@@ -1,13 +1,13 @@
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
+import pytest
 
 from app.api.v1.endpoints.admin_dashboard import (
     count_rows,
     get_admin_dashboard_summary,
 )
-from app.db.models.vehicle_assignment import AssignmentStatus
 from app.db.models.vehicle_issue import VehicleIssueStatus
 
 
@@ -95,18 +95,33 @@ async def test_get_admin_dashboard_summary():
 
     # 18 apeluri count_rows -> db.scalar(...)
     db.scalar.side_effect = [
-        10, 8, 2,   # users_total, users_active, users_inactive
-        20, 12, 3, 4, 1,  # vehicles_total, active, in_service, inactive, sold
-        5, 7,       # assignments_active, assignments_closed
-        6, 2, 9, 17,  # issues_open, issues_in_progress, issues_resolved, issues_total
-        50, 30, 20, 11, 22, 13,  # documents_total, personal, company, contracts, payslips, driver_licenses
+        10,
+        8,
+        2,  # users_total, users_active, users_inactive
+        20,
+        12,
+        3,
+        4,
+        1,  # vehicles_total, active, in_service, inactive, sold
+        5,
+        7,  # assignments_active, assignments_closed
+        6,
+        2,
+        9,
+        17,  # issues_open, issues_in_progress, issues_resolved, issues_total
+        50,
+        30,
+        20,
+        11,
+        22,
+        13,  # documents_total, personal, company, contracts, payslips, driver_licenses
     ]
 
     issue_1 = make_issue(
         issue_id=101,
         vehicle_id=1001,
         status=VehicleIssueStatus.OPEN,
-        created_at=datetime(2026, 3, 29, 10, 0, tzinfo=timezone.utc),
+        created_at=datetime(2026, 3, 29, 10, 0, tzinfo=UTC),
         other_problems="flat tire",
     )
     vehicle_1 = make_vehicle(
@@ -124,7 +139,7 @@ async def test_get_admin_dashboard_summary():
         issue_id=102,
         vehicle_id=1002,
         status="custom_status",
-        created_at=datetime(2026, 3, 28, 9, 30, tzinfo=timezone.utc),
+        created_at=datetime(2026, 3, 28, 9, 30, tzinfo=UTC),
         other_problems=None,
     )
     vehicle_2 = make_vehicle(
@@ -140,7 +155,7 @@ async def test_get_admin_dashboard_summary():
 
     assignment_1 = make_assignment(
         assignment_id=201,
-        started_at=datetime(2026, 3, 27, 8, 0, tzinfo=timezone.utc),
+        started_at=datetime(2026, 3, 27, 8, 0, tzinfo=UTC),
     )
     active_user_1 = make_user(
         user_id=601,
@@ -155,7 +170,7 @@ async def test_get_admin_dashboard_summary():
 
     assignment_2 = make_assignment(
         assignment_id=202,
-        started_at=datetime(2026, 3, 26, 7, 45, tzinfo=timezone.utc),
+        started_at=datetime(2026, 3, 26, 7, 45, tzinfo=UTC),
     )
     active_user_2 = make_user(
         user_id=602,
@@ -169,14 +184,18 @@ async def test_get_admin_dashboard_summary():
     )
 
     db.execute.side_effect = [
-        FakeResult([
-            (issue_1, vehicle_1, user_1),
-            (issue_2, vehicle_2, user_2),
-        ]),
-        FakeResult([
-            (assignment_1, active_user_1, active_vehicle_1),
-            (assignment_2, active_user_2, active_vehicle_2),
-        ]),
+        FakeResult(
+            [
+                (issue_1, vehicle_1, user_1),
+                (issue_2, vehicle_2, user_2),
+            ]
+        ),
+        FakeResult(
+            [
+                (assignment_1, active_user_1, active_vehicle_1),
+                (assignment_2, active_user_2, active_vehicle_2),
+            ]
+        ),
     ]
 
     response = await get_admin_dashboard_summary(db=db, _=True)
@@ -238,7 +257,7 @@ async def test_get_admin_dashboard_summary():
     assert first_assignment.vehicle_license_plate == "B-300-CCC"
     assert first_assignment.vehicle_brand == "Skoda"
     assert first_assignment.vehicle_model == "Octavia"
-    assert first_assignment.started_at == datetime(2026, 3, 27, 8, 0, tzinfo=timezone.utc)
+    assert first_assignment.started_at == datetime(2026, 3, 27, 8, 0, tzinfo=UTC)
 
     second_assignment = response.active_assignments[1]
     assert second_assignment.assignment_id == 202
@@ -248,4 +267,4 @@ async def test_get_admin_dashboard_summary():
     assert second_assignment.vehicle_license_plate == "B-400-DDD"
     assert second_assignment.vehicle_brand == "Ford"
     assert second_assignment.vehicle_model == "Focus"
-    assert second_assignment.started_at == datetime(2026, 3, 26, 7, 45, tzinfo=timezone.utc)
+    assert second_assignment.started_at == datetime(2026, 3, 26, 7, 45, tzinfo=UTC)

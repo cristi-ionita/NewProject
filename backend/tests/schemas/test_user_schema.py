@@ -292,3 +292,56 @@ def test_user_read_schema_model_validate_from_attributes():
     assert result.shift_number == "2"
     assert result.unique_code == "EMP001"
     assert result.is_active is True
+
+
+
+
+
+def test_user_create_schema_allows_none_shift_for_mechanic():
+    obj = UserCreateRequestSchema(
+        full_name="Ana Popescu",
+        shift_number=None,
+        pin="1234",
+        role="mechanic",
+    )
+
+    assert obj.shift_number is None
+    assert obj.role == "mechanic"
+
+
+def test_user_create_schema_invalid_role():
+    with pytest.raises(ValidationError) as exc:
+        UserCreateRequestSchema(
+            full_name="Ana Popescu",
+            shift_number="2",
+            pin="1234",
+            role="admin",
+        )
+
+    assert "Rol invalid." in str(exc.value)
+
+
+def test_user_update_schema_allows_none_shift_for_mechanic():
+    obj = UserUpdateRequestSchema(
+        full_name="Ana Popescu",
+        shift_number=None,
+        pin=None,
+        is_active=True,
+        role="mechanic",
+    )
+
+    assert obj.shift_number is None
+    assert obj.role == "mechanic"
+
+
+def test_user_update_schema_invalid_role():
+    with pytest.raises(ValidationError) as exc:
+        UserUpdateRequestSchema(
+            full_name="Ana Popescu",
+            shift_number="2",
+            pin=None,
+            is_active=True,
+            role="admin",
+        )
+
+    assert "Rol invalid." in str(exc.value)

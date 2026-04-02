@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -76,8 +76,8 @@ def test_profile_user_info_schema_model_validate_from_attributes():
 
 
 def test_profile_employee_info_schema_valid():
-    created_at = datetime.now(timezone.utc)
-    updated_at = datetime.now(timezone.utc)
+    created_at = datetime.now(UTC)
+    updated_at = datetime.now(UTC)
 
     obj = ProfileEmployeeInfoSchema(
         first_name="Ana",
@@ -109,8 +109,8 @@ def test_profile_employee_info_schema_valid():
 
 
 def test_profile_employee_info_schema_optional_fields():
-    created_at = datetime.now(timezone.utc)
-    updated_at = datetime.now(timezone.utc)
+    created_at = datetime.now(UTC)
+    updated_at = datetime.now(UTC)
 
     obj = ProfileEmployeeInfoSchema(
         first_name="Ana",
@@ -144,8 +144,8 @@ def test_profile_employee_info_schema_extra_forbidden():
         ProfileEmployeeInfoSchema(
             first_name="Ana",
             last_name="Popescu",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             extra_field="boom",
         )
 
@@ -162,8 +162,8 @@ def test_profile_employee_info_schema_model_validate_from_attributes():
         iban="RO49AAAA1B31007593840000",
         emergency_contact_name="Maria",
         emergency_contact_phone="0722222222",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     result = ProfileEmployeeInfoSchema.model_validate(source)
@@ -208,8 +208,8 @@ def test_profile_documents_summary_schema_extra_forbidden():
 
 
 def test_profile_summary_response_schema_valid_with_profile():
-    created_at = datetime.now(timezone.utc)
-    updated_at = datetime.now(timezone.utc)
+    created_at = datetime.now(UTC)
+    updated_at = datetime.now(UTC)
 
     obj = ProfileSummaryResponseSchema(
         user=ProfileUserInfoSchema(

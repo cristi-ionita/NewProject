@@ -1,5 +1,5 @@
 import io
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -84,7 +84,7 @@ def make_document(
         expires_at=expires_at,
     )
     doc.id = document_id
-    doc.created_at = datetime(2026, 3, 30, 10, 0, tzinfo=timezone.utc)
+    doc.created_at = datetime(2026, 3, 30, 10, 0, tzinfo=UTC)
     return doc
 
 
@@ -94,7 +94,9 @@ def make_document_schema_response(document):
         user_id=document.user_id,
         uploaded_by=document.uploaded_by,
         type=document.type.value if hasattr(document.type, "value") else str(document.type),
-        category=document.category.value if hasattr(document.category, "value") else str(document.category),
+        category=document.category.value
+        if hasattr(document.category, "value")
+        else str(document.category),
         status=document.status.value if hasattr(document.status, "value") else str(document.status),
         file_name=document.file_name,
         file_path=document.file_path,
@@ -180,7 +182,9 @@ def test_remove_file_if_exists_no_error_for_missing_file(tmp_path):
 def test_save_uploaded_file(tmp_path, monkeypatch):
     monkeypatch.setattr("app.api.v1.endpoints.documents.UPLOAD_DIR", tmp_path)
 
-    file = make_upload_file(filename="contract.pdf", content_type="application/pdf", content=b"content")
+    file = make_upload_file(
+        filename="contract.pdf", content_type="application/pdf", content=b"content"
+    )
 
     original_name, file_path, mime_type = save_uploaded_file(file, user_id=7)
 
@@ -361,7 +365,7 @@ async def test_upload_my_document(monkeypatch):
 
     async def refresh_side_effect(obj):
         obj.id = 100
-        obj.created_at = datetime(2026, 3, 30, 12, 0, tzinfo=timezone.utc)
+        obj.created_at = datetime(2026, 3, 30, 12, 0, tzinfo=UTC)
 
     db.refresh.side_effect = refresh_side_effect
 
@@ -659,7 +663,7 @@ async def test_admin_upload_document(monkeypatch):
 
     async def refresh_side_effect(obj):
         obj.id = 222
-        obj.created_at = datetime(2026, 3, 30, 13, 0, tzinfo=timezone.utc)
+        obj.created_at = datetime(2026, 3, 30, 13, 0, tzinfo=UTC)
 
     db.refresh.side_effect = refresh_side_effect
 
@@ -686,3 +690,25 @@ async def test_admin_upload_document(monkeypatch):
     db.add.assert_called_once()
     db.commit.assert_awaited_once()
     db.refresh.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_download_document_file_missing(monkeypatch):
+    document = SimpleNamespace(
+        id=1,
+        file_path="/tmp/does-not-exist.pdf",
+        original_filename="test.pdf",
+    )
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.documents.get_document_by_id_or_404",
+        AsyncMock(return_value=document),
+    )
+
+    db = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc:
+        await admin_download_document(document_id=1, db=db, _=True)
+
+    assert exc.value.status_code == 404
+    assert exc.value.detail == "Fișier lipsă."

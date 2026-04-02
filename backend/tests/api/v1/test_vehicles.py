@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -95,7 +95,7 @@ def make_assignment(
         user_id=user_id,
         vehicle_id=vehicle_id,
         status=status,
-        started_at=started_at or datetime(2026, 3, 30, 8, 0, tzinfo=timezone.utc),
+        started_at=started_at or datetime(2026, 3, 30, 8, 0, tzinfo=UTC),
         ended_at=ended_at,
         user=user,
     )
@@ -178,9 +178,7 @@ def make_create_payload(
 
 
 def make_update_payload(**kwargs):
-    return SimpleNamespace(
-        model_dump=lambda exclude_unset=True: kwargs
-    )
+    return SimpleNamespace(model_dump=lambda exclude_unset=True: kwargs)
 
 
 @pytest.mark.asyncio
@@ -490,7 +488,7 @@ async def test_get_vehicle_history(monkeypatch):
         assignment_id=100,
         vehicle_id=1,
         user=user,
-        ended_at=datetime(2026, 3, 30, 18, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 30, 18, 0, tzinfo=UTC),
     )
     report = make_report(assignment_id=100)
 
@@ -541,3 +539,37 @@ async def test_get_vehicle(monkeypatch):
 
     assert result.id == 1
     assert result.license_plate == "B-123-XYZ"
+
+
+@pytest.mark.asyncio
+async def test_ensure_unique_license_plate_excludes_current_vehicle():
+    db = AsyncMock()
+
+    fake_result = Mock()
+    fake_result.scalar_one_or_none.return_value = None
+    db.execute.return_value = fake_result
+
+    await ensure_unique_license_plate(
+        db=db,
+        license_plate="B-123-XYZ",
+        exclude_vehicle_id=1,
+    )
+
+    db.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_ensure_unique_vin_excludes_current_vehicle():
+    db = AsyncMock()
+
+    fake_result = Mock()
+    fake_result.scalar_one_or_none.return_value = None
+    db.execute.return_value = fake_result
+
+    await ensure_unique_vin(
+        db=db,
+        vin="WVWZZZ1JZXW000001",
+        exclude_vehicle_id=1,
+    )
+
+    db.execute.assert_called_once()

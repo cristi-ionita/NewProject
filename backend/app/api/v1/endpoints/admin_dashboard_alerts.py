@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.endpoints.auth import get_current_admin
+from app.api.v1.dependencies import get_current_admin
 from app.db.models.document import Document, DocumentType
 from app.db.models.employee_profile import EmployeeProfile
 from app.db.models.user import User
@@ -47,9 +47,7 @@ async def get_users_without_profile(
     )
     users = result.scalars().all()
 
-    return UsersWithoutProfileResponse(
-        users=[build_user_alert(user) for user in users]
-    )
+    return UsersWithoutProfileResponse(users=[build_user_alert(user) for user in users])
 
 
 @router.get("/users-without-contract", response_model=UsersWithoutContractResponse)
@@ -58,10 +56,7 @@ async def get_users_without_contract(
     _: bool = Depends(get_current_admin),
 ) -> UsersWithoutContractResponse:
     contract_subquery = (
-        select(Document.user_id)
-        .where(Document.type == DocumentType.CONTRACT)
-        .distinct()
-        .subquery()
+        select(Document.user_id).where(Document.type == DocumentType.CONTRACT).distinct().subquery()
     )
 
     result = await db.execute(
@@ -72,9 +67,7 @@ async def get_users_without_contract(
     )
     users = result.scalars().all()
 
-    return UsersWithoutContractResponse(
-        users=[build_user_alert(user) for user in users]
-    )
+    return UsersWithoutContractResponse(users=[build_user_alert(user) for user in users])
 
 
 @router.get(
@@ -100,9 +93,7 @@ async def get_users_without_driver_license(
     )
     users = result.scalars().all()
 
-    return UsersWithoutDriverLicenseResponse(
-        users=[build_user_alert(user) for user in users]
-    )
+    return UsersWithoutDriverLicenseResponse(users=[build_user_alert(user) for user in users])
 
 
 @router.get("/vehicles-with-open-issues", response_model=VehiclesWithOpenIssuesResponse)
@@ -110,31 +101,35 @@ async def get_vehicles_with_open_issues(
     db: AsyncSession = Depends(get_db),
     _: bool = Depends(get_current_admin),
 ) -> VehiclesWithOpenIssuesResponse:
-    vehicles_result = await db.execute(
-        select(Vehicle).order_by(Vehicle.license_plate.asc())
-    )
+    vehicles_result = await db.execute(select(Vehicle).order_by(Vehicle.license_plate.asc()))
     vehicles = vehicles_result.scalars().all()
 
     response_items: list[DashboardVehicleIssueAlertSchema] = []
 
     for vehicle in vehicles:
-        open_count = await db.scalar(
-            select(func.count(VehicleIssue.id)).where(
-                and_(
-                    VehicleIssue.vehicle_id == vehicle.id,
-                    VehicleIssue.status == VehicleIssueStatus.OPEN,
+        open_count = (
+            await db.scalar(
+                select(func.count(VehicleIssue.id)).where(
+                    and_(
+                        VehicleIssue.vehicle_id == vehicle.id,
+                        VehicleIssue.status == VehicleIssueStatus.OPEN,
+                    )
                 )
             )
-        ) or 0
+            or 0
+        )
 
-        in_progress_count = await db.scalar(
-            select(func.count(VehicleIssue.id)).where(
-                and_(
-                    VehicleIssue.vehicle_id == vehicle.id,
-                    VehicleIssue.status == VehicleIssueStatus.IN_PROGRESS,
+        in_progress_count = (
+            await db.scalar(
+                select(func.count(VehicleIssue.id)).where(
+                    and_(
+                        VehicleIssue.vehicle_id == vehicle.id,
+                        VehicleIssue.status == VehicleIssueStatus.IN_PROGRESS,
+                    )
                 )
             )
-        ) or 0
+            or 0
+        )
 
         latest_issue_created_at = await db.scalar(
             select(func.max(VehicleIssue.created_at)).where(

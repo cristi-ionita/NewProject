@@ -187,7 +187,9 @@ async def test_get_employee_profile_returns_none():
 @pytest.mark.asyncio
 async def test_get_documents_returns_list():
     documents = [
-        make_document(user_id=1, category=DocumentCategory.PERSONAL, doc_type=DocumentType.CONTRACT),
+        make_document(
+            user_id=1, category=DocumentCategory.PERSONAL, doc_type=DocumentType.CONTRACT
+        ),
         make_document(user_id=1, category=DocumentCategory.COMPANY, doc_type=DocumentType.PAYSLIP),
     ]
 
@@ -213,9 +215,13 @@ def test_build_documents_summary_empty():
 
 def test_build_documents_summary_mixed_documents():
     documents = [
-        make_document(user_id=1, category=DocumentCategory.PERSONAL, doc_type=DocumentType.CONTRACT),
+        make_document(
+            user_id=1, category=DocumentCategory.PERSONAL, doc_type=DocumentType.CONTRACT
+        ),
         make_document(user_id=1, category=DocumentCategory.COMPANY, doc_type=DocumentType.PAYSLIP),
-        make_document(user_id=1, category=DocumentCategory.PERSONAL, doc_type=DocumentType.DRIVER_LICENSE),
+        make_document(
+            user_id=1, category=DocumentCategory.PERSONAL, doc_type=DocumentType.DRIVER_LICENSE
+        ),
     ]
 
     result = ProfileSummaryService.build_documents_summary(documents)
@@ -246,7 +252,9 @@ async def test_get_by_user_id_with_profile(monkeypatch):
     user = make_user(user_id=1)
     profile = make_employee_profile(user_id=1)
     documents = [
-        make_document(user_id=1, category=DocumentCategory.PERSONAL, doc_type=DocumentType.CONTRACT),
+        make_document(
+            user_id=1, category=DocumentCategory.PERSONAL, doc_type=DocumentType.CONTRACT
+        ),
         make_document(user_id=1, category=DocumentCategory.COMPANY, doc_type=DocumentType.PAYSLIP),
     ]
 
@@ -295,7 +303,9 @@ async def test_get_by_user_id_with_profile(monkeypatch):
 async def test_get_by_user_id_without_profile(monkeypatch):
     user = make_user(user_id=1)
     documents = [
-        make_document(user_id=1, category=DocumentCategory.PERSONAL, doc_type=DocumentType.DRIVER_LICENSE),
+        make_document(
+            user_id=1, category=DocumentCategory.PERSONAL, doc_type=DocumentType.DRIVER_LICENSE
+        ),
     ]
 
     monkeypatch.setattr(

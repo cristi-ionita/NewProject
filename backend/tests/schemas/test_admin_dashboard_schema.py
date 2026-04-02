@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -141,7 +141,7 @@ def test_dashboard_documents_summary_schema_extra_forbidden():
 
 
 def test_dashboard_recent_issue_schema_valid():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = DashboardRecentIssueSchema(
         id=1,
@@ -160,7 +160,7 @@ def test_dashboard_recent_issue_schema_valid():
 
 
 def test_dashboard_recent_issue_schema_optional_other_problems():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = DashboardRecentIssueSchema(
         id=1,
@@ -185,13 +185,13 @@ def test_dashboard_recent_issue_schema_extra_forbidden():
             reported_by_user_id=10,
             reported_by_name="Ana Popescu",
             status="open",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             extra_field=1,
         )
 
 
 def test_dashboard_active_assignment_schema_valid():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = DashboardActiveAssignmentSchema(
         assignment_id=201,
@@ -218,13 +218,13 @@ def test_dashboard_active_assignment_schema_extra_forbidden():
             vehicle_license_plate="B-300-CCC",
             vehicle_brand="Skoda",
             vehicle_model="Octavia",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             extra_field=1,
         )
 
 
 def test_admin_dashboard_summary_response_valid():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = AdminDashboardSummaryResponse(
         users=DashboardUsersSummarySchema(total=10, active=8, inactive=2),
@@ -232,9 +232,7 @@ def test_admin_dashboard_summary_response_valid():
             total=20, active=12, in_service=3, inactive=4, sold=1
         ),
         assignments=DashboardAssignmentsSummarySchema(active=5, closed=7),
-        issues=DashboardIssuesSummarySchema(
-            open=6, in_progress=2, resolved=9, total=17
-        ),
+        issues=DashboardIssuesSummarySchema(open=6, in_progress=2, resolved=9, total=17),
         documents=DashboardDocumentsSummarySchema(
             total=50, personal=30, company=20, contracts=11, payslips=22, driver_licenses=13
         ),
@@ -268,7 +266,7 @@ def test_admin_dashboard_summary_response_valid():
 
 
 def test_admin_dashboard_summary_response_extra_forbidden():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     with pytest.raises(ValidationError):
         AdminDashboardSummaryResponse(
@@ -277,9 +275,7 @@ def test_admin_dashboard_summary_response_extra_forbidden():
                 total=20, active=12, in_service=3, inactive=4, sold=1
             ),
             assignments=DashboardAssignmentsSummarySchema(active=5, closed=7),
-            issues=DashboardIssuesSummarySchema(
-                open=6, in_progress=2, resolved=9, total=17
-            ),
+            issues=DashboardIssuesSummarySchema(open=6, in_progress=2, resolved=9, total=17),
             documents=DashboardDocumentsSummarySchema(
                 total=50, personal=30, company=20, contracts=11, payslips=22, driver_licenses=13
             ),

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -66,7 +66,7 @@ def make_leave(
         status=status,
         reviewed_by_admin_id=reviewed_by_admin_id,
         reviewed_at=reviewed_at,
-        created_at=created_at or datetime(2026, 3, 30, 10, 0, tzinfo=timezone.utc),
+        created_at=created_at or datetime(2026, 3, 30, 10, 0, tzinfo=UTC),
     )
 
 
@@ -145,7 +145,7 @@ async def test_create_leave_request(monkeypatch):
 
     async def refresh_side_effect(obj):
         obj.id = 101
-        obj.created_at = datetime(2026, 3, 30, 12, 0, tzinfo=timezone.utc)
+        obj.created_at = datetime(2026, 3, 30, 12, 0, tzinfo=UTC)
 
     db.refresh.side_effect = refresh_side_effect
 
@@ -196,10 +196,12 @@ async def test_list_my_leaves(monkeypatch):
     )
 
     db = AsyncMock()
-    db.execute.return_value = FakeResult([
-        (leave_1, user),
-        (leave_2, user),
-    ])
+    db.execute.return_value = FakeResult(
+        [
+            (leave_1, user),
+            (leave_2, user),
+        ]
+    )
 
     result = await list_my_leaves(code="EMP001", db=db)
 
@@ -238,10 +240,12 @@ async def test_list_all_leaves():
     admin = make_user(user_id=99, full_name="Admin", unique_code="ADMIN")
 
     db = AsyncMock()
-    db.execute.return_value = FakeResult([
-        (leave_1, user_1),
-        (leave_2, user_2),
-    ])
+    db.execute.return_value = FakeResult(
+        [
+            (leave_1, user_1),
+            (leave_2, user_2),
+        ]
+    )
 
     result = await list_all_leaves(db=db, admin=admin)
 

@@ -15,6 +15,7 @@ from app.api.v1.endpoints.users import (
     hash_pin,
     list_users,
     normalize_full_name,
+    normalize_role,
     reset_user_pin,
     update_user,
     validate_pin,
@@ -444,3 +445,66 @@ async def test_activate_user(monkeypatch):
 
     db.commit.assert_awaited_once()
     db.refresh.assert_awaited_once_with(user)
+
+
+def test_normalize_role_invalid():
+    with pytest.raises(HTTPException) as exc:
+        normalize_role("admin")
+
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "Rol invalid."
+
+
+@pytest.mark.asyncio
+async def test_list_users_active_only(monkeypatch):
+    user = make_user(user_id=1, is_active=True)
+
+    fake_result = Mock()
+    fake_result.scalars.return_value.all.return_value = [user]
+
+    db = AsyncMock()
+    db.execute.return_value = fake_result
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.users.UserReadSchema.model_validate",
+        lambda u: make_user_schema_response(u),
+    )
+
+    result = await list_users(active_only=True, db=db, _=True)
+
+    assert len(result) == 1
+    db.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_ensure_unique_full_name_excludes_current_user():
+    db = AsyncMock()
+
+    fake_result = Mock()
+    fake_result.scalar_one_or_none.return_value = None
+    db.execute.return_value = fake_result
+
+    await ensure_unique_full_name(
+        db=db,
+        full_name="Ana Popescu",
+        exclude_user_id=1,
+    )
+
+    db.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_ensure_shift_is_available_excludes_current_user():
+    db = AsyncMock()
+
+    fake_result = Mock()
+    fake_result.scalar_one_or_none.return_value = None
+    db.execute.return_value = fake_result
+
+    await ensure_shift_is_available(
+        db=db,
+        shift_number="2",
+        exclude_user_id=1,
+    )
+
+    db.execute.assert_called_once()

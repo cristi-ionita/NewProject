@@ -1,4 +1,10 @@
+import os
+from functools import lru_cache
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+ENV_FILE = os.getenv("APP_ENV_FILE", ".env")
 
 
 class Settings(BaseSettings):
@@ -16,7 +22,7 @@ class Settings(BaseSettings):
     ADMIN_TOKEN_SECRET: str
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -29,4 +35,6 @@ class Settings(BaseSettings):
         )
 
 
-settings = Settings()
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

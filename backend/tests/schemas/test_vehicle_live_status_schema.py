@@ -1,13 +1,13 @@
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 
 from app.schemas.vehicle_live_status import (
     VehicleLiveStatusItemSchema,
     VehicleLiveStatusResponseSchema,
 )
 
-
 # ================= ITEM =================
+
 
 def test_vehicle_live_status_item_schema_valid_minimal_assignment():
     obj = VehicleLiveStatusItemSchema(
@@ -156,6 +156,7 @@ def test_vehicle_live_status_item_schema_extra_forbidden():
 
 
 # ================= RESPONSE =================
+
 
 def test_vehicle_live_status_response_schema_valid():
     response = VehicleLiveStatusResponseSchema(

@@ -52,7 +52,7 @@ class User(Base):
         nullable=False,
     )
 
-    employee_profile: Mapped["EmployeeProfile | None"] = relationship(
+    employee_profile: Mapped[EmployeeProfile | None] = relationship(
         "EmployeeProfile",
         back_populates="user",
         uselist=False,

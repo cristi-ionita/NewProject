@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -20,6 +20,7 @@ def now_utc():
 
 
 # ================= CURRENT SESSION =================
+
 
 def test_current_session_schema_valid():
     started_at = now_utc()
@@ -89,6 +90,7 @@ def test_current_session_schema_extra_forbidden():
 
 # ================= CURRENT SESSION USER =================
 
+
 def test_current_session_user_schema_valid():
     obj = CurrentSessionUserSchema(
         id=1,
@@ -141,6 +143,7 @@ def test_current_session_user_schema_extra_forbidden():
 
 
 # ================= CURRENT SESSION VEHICLE =================
+
 
 def test_current_session_vehicle_schema_valid():
     obj = CurrentSessionVehicleSchema(
@@ -245,6 +248,7 @@ def test_current_session_vehicle_schema_extra_forbidden():
 
 # ================= PREVIOUS HANDOVER REPORT =================
 
+
 def test_previous_handover_report_schema_valid():
     started_at = now_utc()
     ended_at = now_utc()
@@ -329,6 +333,7 @@ def test_previous_handover_report_schema_extra_forbidden():
 
 # ================= CURRENT HANDOVER START =================
 
+
 def test_current_handover_start_schema_valid_defaults():
     obj = CurrentHandoverStartSchema()
 
@@ -386,6 +391,7 @@ def test_current_handover_start_schema_extra_forbidden():
 
 # ================= CURRENT HANDOVER END =================
 
+
 def test_current_handover_end_schema_valid_defaults():
     obj = CurrentHandoverEndSchema()
 
@@ -427,6 +433,7 @@ def test_current_handover_end_schema_extra_forbidden():
 
 
 # ================= PAGE RESPONSE =================
+
 
 def test_vehicle_session_page_response_schema_valid_minimal():
     started_at = now_utc()
@@ -630,6 +637,7 @@ def test_vehicle_session_page_response_schema_extra_forbidden():
 
 
 # ================= SESSION ACCESS QUERY =================
+
 
 def test_session_access_query_schema_valid():
     obj = SessionAccessQuerySchema(user_code="EMP001")

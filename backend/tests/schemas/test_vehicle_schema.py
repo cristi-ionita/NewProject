@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -16,6 +16,7 @@ def now_utc():
 
 
 # ================= CREATE =================
+
 
 def test_vehicle_create_schema_valid_minimal():
     obj = VehicleCreateSchema(
@@ -196,6 +197,7 @@ def test_vehicle_create_schema_extra_forbidden():
 
 # ================= UPDATE =================
 
+
 def test_vehicle_update_schema_valid_empty():
     obj = VehicleUpdateSchema()
 
@@ -292,6 +294,7 @@ def test_vehicle_update_schema_extra_forbidden():
 
 
 # ================= READ =================
+
 
 def test_vehicle_read_schema_valid():
     created_at = now_utc()

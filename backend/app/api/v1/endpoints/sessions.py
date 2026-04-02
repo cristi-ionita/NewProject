@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,7 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 # HELPERS
 # =========================
 
+
 async def get_assignment_or_404(
     db: AsyncSession,
     assignment_id: int,
@@ -51,9 +52,7 @@ async def get_handover_report(
     assignment_id: int,
 ) -> VehicleHandoverReport | None:
     result = await db.execute(
-        select(VehicleHandoverReport).where(
-            VehicleHandoverReport.assignment_id == assignment_id
-        )
+        select(VehicleHandoverReport).where(VehicleHandoverReport.assignment_id == assignment_id)
     )
     return result.scalar_one_or_none()
 
@@ -67,31 +66,36 @@ def ensure_session_belongs_to_user(assignment, user):
 
 
 def is_handover_start_completed(report):
-    return any([
-        report.mileage_start,
-        report.dashboard_warnings_start,
-        report.damage_notes_start,
-        report.notes_start,
-        report.has_documents,
-        report.has_medkit,
-        report.has_extinguisher,
-        report.has_warning_triangle,
-        report.has_spare_wheel,
-    ])
+    return any(
+        [
+            report.mileage_start,
+            report.dashboard_warnings_start,
+            report.damage_notes_start,
+            report.notes_start,
+            report.has_documents,
+            report.has_medkit,
+            report.has_extinguisher,
+            report.has_warning_triangle,
+            report.has_spare_wheel,
+        ]
+    )
 
 
 def is_handover_end_completed(report):
-    return any([
-        report.mileage_end,
-        report.dashboard_warnings_end,
-        report.damage_notes_end,
-        report.notes_end,
-    ])
+    return any(
+        [
+            report.mileage_end,
+            report.dashboard_warnings_end,
+            report.damage_notes_end,
+            report.notes_end,
+        ]
+    )
 
 
 # =========================
 # ENDPOINTS
 # =========================
+
 
 @router.get("/{assignment_id}", response_model=VehicleSessionPageResponseSchema)
 async def get_session_page(
@@ -164,7 +168,8 @@ async def get_session_page(
                 has_spare_wheel=report.has_spare_wheel,
                 is_completed=is_handover_start_completed(report),
             )
-            if report else None
+            if report
+            else None
         ),
         handover_end=(
             CurrentHandoverEndSchema(
@@ -174,7 +179,8 @@ async def get_session_page(
                 notes_end=report.notes_end,
                 is_completed=is_handover_end_completed(report),
             )
-            if report else None
+            if report
+            else None
         ),
     )
 

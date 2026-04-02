@@ -1,0 +1,15 @@
+  frontend:
+    build:
+      context: ./frontend
+    container_name: cars_frontend
+    restart: unless-stopped
+    env_file:
+      - ./frontend/.env.docker
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev -- --hostname 0.0.0.0

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -14,7 +14,7 @@ from app.schemas.document import (
 
 
 def test_document_base_schema_valid():
-    expires_at = datetime.now(timezone.utc)
+    expires_at = datetime.now(UTC)
 
     obj = DocumentBaseSchema(
         type=DocumentType.CONTRACT,
@@ -73,7 +73,7 @@ def test_document_create_schema_extra_forbidden():
 
 
 def test_document_update_schema_valid_with_all_fields():
-    expires_at = datetime.now(timezone.utc)
+    expires_at = datetime.now(UTC)
 
     obj = DocumentUpdateSchema(
         type=DocumentType.DRIVER_LICENSE,
@@ -105,8 +105,8 @@ def test_document_update_schema_extra_forbidden():
 
 
 def test_document_read_schema_valid():
-    created_at = datetime.now(timezone.utc)
-    updated_at = datetime.now(timezone.utc)
+    created_at = datetime.now(UTC)
+    updated_at = datetime.now(UTC)
 
     obj = DocumentReadSchema(
         id=10,
@@ -132,8 +132,8 @@ def test_document_read_schema_valid():
 
 
 def test_document_read_schema_uploaded_by_optional():
-    created_at = datetime.now(timezone.utc)
-    updated_at = datetime.now(timezone.utc)
+    created_at = datetime.now(UTC)
+    updated_at = datetime.now(UTC)
 
     obj = DocumentReadSchema(
         id=10,
@@ -164,8 +164,8 @@ def test_document_read_schema_file_name_too_short():
             expires_at=None,
             file_name="",
             mime_type="application/pdf",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
 
@@ -181,8 +181,8 @@ def test_document_read_schema_file_name_too_long():
             expires_at=None,
             file_name="a" * 256,
             mime_type="application/pdf",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
 
@@ -198,8 +198,8 @@ def test_document_read_schema_mime_type_too_short():
             expires_at=None,
             file_name="contract.pdf",
             mime_type="",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
 
@@ -215,8 +215,8 @@ def test_document_read_schema_mime_type_too_long():
             expires_at=None,
             file_name="contract.pdf",
             mime_type="a" * 101,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
 
@@ -232,8 +232,8 @@ def test_document_read_schema_extra_forbidden():
             expires_at=None,
             file_name="contract.pdf",
             mime_type="application/pdf",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             extra_field="boom",
         )
 
@@ -249,8 +249,8 @@ def test_document_read_schema_model_validate_from_attributes():
         expires_at=None,
         file_name="contract.pdf",
         mime_type="application/pdf",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     result = DocumentReadSchema.model_validate(obj)

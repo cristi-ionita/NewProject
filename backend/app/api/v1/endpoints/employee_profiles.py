@@ -51,7 +51,7 @@ async def create_employee_profile(
     try:
         profile = await EmployeeProfileService.create(db, payload)
     except ValueError as exc:
-        raise HTTPException(400, str(exc))
+        raise HTTPException(400, str(exc)) from exc
 
     return EmployeeProfileReadSchema.model_validate(profile)
 
@@ -81,9 +81,7 @@ async def update_employee_profile(
 ) -> EmployeeProfileReadSchema:
     profile = await get_employee_profile_or_404(db, user_id)
 
-    user_result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
+    user_result = await db.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
 
     if user is None:

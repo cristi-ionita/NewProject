@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, date
+from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import Date, DateTime, Enum as SqlEnum, ForeignKey, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, Text, func
+from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base

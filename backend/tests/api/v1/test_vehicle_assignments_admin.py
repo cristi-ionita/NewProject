@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -76,7 +76,7 @@ def make_assignment(
         user_id=user_id,
         vehicle_id=vehicle_id,
         status=status,
-        started_at=started_at or datetime(2026, 3, 30, 8, 0, tzinfo=timezone.utc),
+        started_at=started_at or datetime(2026, 3, 30, 8, 0, tzinfo=UTC),
         ended_at=ended_at,
     )
 
@@ -328,7 +328,7 @@ async def test_create_assignment_success(monkeypatch):
 
     async def refresh_side_effect(obj):
         obj.id = 300
-        obj.started_at = datetime(2026, 3, 30, 9, 0, tzinfo=timezone.utc)
+        obj.started_at = datetime(2026, 3, 30, 9, 0, tzinfo=UTC)
 
     db.refresh.side_effect = refresh_side_effect
 
@@ -355,9 +355,11 @@ async def test_list_assignments_without_filters():
     assignment = make_assignment(assignment_id=100, user_id=1, vehicle_id=10)
 
     db = AsyncMock()
-    db.execute.return_value = FakeResult([
-        (assignment, user, vehicle),
-    ])
+    db.execute.return_value = FakeResult(
+        [
+            (assignment, user, vehicle),
+        ]
+    )
 
     result = await list_assignments(
         status_filter=None,
@@ -380,9 +382,11 @@ async def test_list_assignments_with_status_filter():
     assignment = make_assignment(assignment_id=100, status=AssignmentStatus.CLOSED)
 
     db = AsyncMock()
-    db.execute.return_value = FakeResult([
-        (assignment, user, vehicle),
-    ])
+    db.execute.return_value = FakeResult(
+        [
+            (assignment, user, vehicle),
+        ]
+    )
 
     result = await list_assignments(
         status_filter="closed",
@@ -401,7 +405,7 @@ async def test_close_assignment_already_closed(monkeypatch):
     assignment = make_assignment(
         assignment_id=100,
         status=AssignmentStatus.CLOSED,
-        ended_at=datetime(2026, 3, 29, 18, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 29, 18, 0, tzinfo=UTC),
     )
 
     monkeypatch.setattr(
@@ -471,7 +475,7 @@ async def test_delete_closed_assignment_success(monkeypatch):
     assignment = make_assignment(
         assignment_id=100,
         status=AssignmentStatus.CLOSED,
-        ended_at=datetime(2026, 3, 29, 18, 0, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 3, 29, 18, 0, tzinfo=UTC),
     )
 
     monkeypatch.setattr(
@@ -486,3 +490,42 @@ async def test_delete_closed_assignment_success(monkeypatch):
     assert response.status_code == 204
     db.delete.assert_awaited_once_with(assignment)
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_list_assignments_filters_by_user_and_vehicle(monkeypatch):
+    assignment = SimpleNamespace()
+    user = SimpleNamespace()
+    vehicle = SimpleNamespace()
+
+    fake_result = Mock()
+    fake_result.all.return_value = [(assignment, user, vehicle)]
+
+    db = AsyncMock()
+    db.execute.return_value = fake_result
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.vehicle_assignments_admin.build_assignment_read",
+        lambda a, u, v: {
+            "id": 1,
+            "user_id": 1,
+            "user_name": "Ana Popescu",
+            "vehicle_id": 2,
+            "vehicle_license_plate": "B-123-XYZ",
+            "vehicle_brand": "Dacia",
+            "vehicle_model": "Logan",
+            "status": "active",
+            "started_at": "2026-01-01T08:00:00Z",
+        },
+    )
+
+    result = await list_assignments(
+        db=db,
+        status_filter=None,
+        user_id=1,
+        vehicle_id=2,
+        _=True,
+    )
+
+    assert len(result.assignments) == 1
+    db.execute.assert_called_once()

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import desc, select
@@ -27,18 +27,16 @@ router = APIRouter(prefix="/leave-requests", tags=["leave-requests"])
 def parse_status(value: str) -> LeaveStatus:
     try:
         return LeaveStatus(value.strip().lower())
-    except ValueError:
+    except ValueError as err:
         raise HTTPException(
             status_code=400,
             detail="Invalid status.",
-        )
+        ) from err
 
 
 async def get_leave_or_404(db: AsyncSession, leave_id: int) -> LeaveRequest:
     leave = (
-        await db.execute(
-            select(LeaveRequest).where(LeaveRequest.id == leave_id)
-        )
+        await db.execute(select(LeaveRequest).where(LeaveRequest.id == leave_id))
     ).scalar_one_or_none()
 
     if not leave:
@@ -159,7 +157,7 @@ async def review_leave(
 
     leave.status = parse_status(payload.status)
     leave.reviewed_by_admin_id = admin.id
-    leave.reviewed_at = datetime.now(timezone.utc)
+    leave.reviewed_at = datetime.now(UTC)
 
     await db.commit()
     await db.refresh(leave)

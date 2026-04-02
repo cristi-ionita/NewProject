@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Date, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
+if TYPE_CHECKING:
+    from app.db.models.user import User
 
 class EmployeeProfile(Base):
     __tablename__ = "employee_profiles"
@@ -44,4 +47,4 @@ class EmployeeProfile(Base):
         nullable=False,
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="employee_profile")
+    user: Mapped[User] = relationship("User", back_populates="employee_profile")

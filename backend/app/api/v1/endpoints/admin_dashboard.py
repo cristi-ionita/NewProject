@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.endpoints.auth import get_current_admin
+from app.api.v1.dependencies import get_current_admin
 from app.db.models.document import Document, DocumentCategory, DocumentType
 from app.db.models.user import User
 from app.db.models.vehicle import Vehicle, VehicleStatus
@@ -45,7 +45,9 @@ async def get_admin_dashboard_summary(
 
     vehicles_total = await count_rows(db, Vehicle.id)
     vehicles_active = await count_rows(db, Vehicle.id, Vehicle.status == VehicleStatus.ACTIVE)
-    vehicles_in_service = await count_rows(db, Vehicle.id, Vehicle.status == VehicleStatus.IN_SERVICE)
+    vehicles_in_service = await count_rows(
+        db, Vehicle.id, Vehicle.status == VehicleStatus.IN_SERVICE
+    )
     vehicles_inactive = await count_rows(db, Vehicle.id, Vehicle.status == VehicleStatus.INACTIVE)
     vehicles_sold = await count_rows(db, Vehicle.id, Vehicle.status == VehicleStatus.SOLD)
 

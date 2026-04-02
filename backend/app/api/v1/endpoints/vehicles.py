@@ -28,6 +28,7 @@ router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 # HELPERS
 # =========================
 
+
 async def get_vehicle_or_404(db: AsyncSession, vehicle_id: int) -> Vehicle:
     result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
     vehicle = result.scalar_one_or_none()
@@ -84,9 +85,7 @@ async def get_handover_report(
     assignment_id: int,
 ) -> VehicleHandoverReport | None:
     result = await db.execute(
-        select(VehicleHandoverReport).where(
-            VehicleHandoverReport.assignment_id == assignment_id
-        )
+        select(VehicleHandoverReport).where(VehicleHandoverReport.assignment_id == assignment_id)
     )
     return result.scalar_one_or_none()
 
@@ -113,6 +112,7 @@ def build_vehicle_live_status_item(
 # =========================
 # ENDPOINTS
 # =========================
+
 
 @router.post("", response_model=VehicleReadSchema, status_code=201)
 async def create_vehicle(
@@ -188,15 +188,19 @@ async def delete_vehicle(
 
 @router.get("/live-status", response_model=VehicleLiveStatusResponseSchema)
 async def get_live_status(db: AsyncSession = Depends(get_db)):
-    vehicles = (await db.execute(
-        select(Vehicle).order_by(Vehicle.license_plate)
-    )).scalars().all()
+    vehicles = (await db.execute(select(Vehicle).order_by(Vehicle.license_plate))).scalars().all()
 
-    assignments = (await db.execute(
-        select(VehicleAssignment)
-        .where(VehicleAssignment.status == AssignmentStatus.ACTIVE)
-        .order_by(VehicleAssignment.started_at.desc())
-    )).scalars().all()
+    assignments = (
+        (
+            await db.execute(
+                select(VehicleAssignment)
+                .where(VehicleAssignment.status == AssignmentStatus.ACTIVE)
+                .order_by(VehicleAssignment.started_at.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     active_map: dict[int, VehicleAssignment] = {}
 
@@ -206,10 +210,7 @@ async def get_live_status(db: AsyncSession = Depends(get_db)):
             active_map[a.vehicle_id] = a
 
     return VehicleLiveStatusResponseSchema(
-        vehicles=[
-            build_vehicle_live_status_item(v, active_map.get(v.id))
-            for v in vehicles
-        ]
+        vehicles=[build_vehicle_live_status_item(v, active_map.get(v.id)) for v in vehicles]
     )
 
 
@@ -220,11 +221,17 @@ async def get_vehicle_history(
 ):
     vehicle = await get_vehicle_or_404(db, vehicle_id)
 
-    assignments = (await db.execute(
-        select(VehicleAssignment)
-        .where(VehicleAssignment.vehicle_id == vehicle_id)
-        .order_by(desc(VehicleAssignment.started_at))
-    )).scalars().all()
+    assignments = (
+        (
+            await db.execute(
+                select(VehicleAssignment)
+                .where(VehicleAssignment.vehicle_id == vehicle_id)
+                .order_by(desc(VehicleAssignment.started_at))
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     history = []
 
@@ -262,6 +269,4 @@ async def get_vehicle(
     vehicle_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    return VehicleReadSchema.model_validate(
-        await get_vehicle_or_404(db, vehicle_id)
-    )
+    return VehicleReadSchema.model_validate(await get_vehicle_or_404(db, vehicle_id))

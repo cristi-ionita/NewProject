@@ -5,7 +5,7 @@ from app.core import security
 
 def test_hash_pin_strips_and_hashes():
     pin = " 1234 "
-    expected = hashlib.sha256("1234".encode()).hexdigest()
+    expected = hashlib.sha256(b"1234").hexdigest()
 
     result = security.hash_pin(pin)
 

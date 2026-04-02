@@ -7,7 +7,6 @@ from app.core.security import verify_admin_token
 from app.db.models.user import User
 from app.db.session import get_db
 
-
 admin_bearer = HTTPBearer(auto_error=False)
 
 
@@ -35,9 +34,7 @@ async def get_user_by_code(
     code: str,
     db: AsyncSession,
 ) -> User | None:
-    result = await db.execute(
-        select(User).where(User.unique_code == code.strip())
-    )
+    result = await db.execute(select(User).where(User.unique_code == code.strip()))
     return result.scalar_one_or_none()
 
 

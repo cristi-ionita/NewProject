@@ -73,11 +73,11 @@ class VehicleIssueMechanicUpdateResponseSchema(BaseSchema):
 def parse_issue_status(value: str) -> VehicleIssueStatus:
     try:
         return VehicleIssueStatus[value.strip().upper()]
-    except KeyError:
+    except KeyError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Status invalid.",
-        )
+        ) from err
 
 
 async def get_user_by_code_or_404(db: AsyncSession, code: str) -> User:
@@ -96,9 +96,7 @@ async def get_assignment_or_404(
     assignment_id: int,
 ) -> VehicleAssignment:
     assignment = (
-        await db.execute(
-            select(VehicleAssignment).where(VehicleAssignment.id == assignment_id)
-        )
+        await db.execute(select(VehicleAssignment).where(VehicleAssignment.id == assignment_id))
     ).scalar_one_or_none()
 
     if assignment is None:
@@ -112,9 +110,7 @@ async def get_issue_or_404(
     issue_id: int,
 ) -> VehicleIssue:
     issue = (
-        await db.execute(
-            select(VehicleIssue).where(VehicleIssue.id == issue_id)
-        )
+        await db.execute(select(VehicleIssue).where(VehicleIssue.id == issue_id))
     ).scalar_one_or_none()
 
     if issue is None:
@@ -283,9 +279,7 @@ async def list_my_vehicle_issues(
     )
 
     if status_filter:
-        query = query.where(
-            VehicleIssue.status == parse_issue_status(status_filter)
-        )
+        query = query.where(VehicleIssue.status == parse_issue_status(status_filter))
 
     result = await db.execute(query.order_by(desc(VehicleIssue.created_at)))
 
@@ -312,9 +306,7 @@ async def list_vehicle_issues(
     )
 
     if status_filter:
-        query = query.where(
-            VehicleIssue.status == parse_issue_status(status_filter)
-        )
+        query = query.where(VehicleIssue.status == parse_issue_status(status_filter))
 
     if vehicle_id is not None:
         query = query.where(VehicleIssue.vehicle_id == vehicle_id)
@@ -326,8 +318,7 @@ async def list_vehicle_issues(
 
     return VehicleIssueListResponseSchema(
         issues=[
-            build_issue_list_item(issue, vehicle, user)
-            for issue, vehicle, user in result.all()
+            build_issue_list_item(issue, vehicle, user) for issue, vehicle, user in result.all()
         ]
     )
 
@@ -345,16 +336,13 @@ async def list_vehicle_issues_for_mechanic(
     )
 
     if status_filter:
-        query = query.where(
-            VehicleIssue.status == parse_issue_status(status_filter)
-        )
+        query = query.where(VehicleIssue.status == parse_issue_status(status_filter))
 
     result = await db.execute(query.order_by(desc(VehicleIssue.created_at)))
 
     return VehicleIssueListResponseSchema(
         issues=[
-            build_issue_list_item(issue, vehicle, user)
-            for issue, vehicle, user in result.all()
+            build_issue_list_item(issue, vehicle, user) for issue, vehicle, user in result.all()
         ]
     )
 

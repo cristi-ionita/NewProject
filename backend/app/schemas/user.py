@@ -111,4 +111,4 @@ class UserReadSchema(ORMBaseSchema):
     shift_number: str | None = None
     unique_code: str
     is_active: bool
-    role: str
+    role: str = "employee"

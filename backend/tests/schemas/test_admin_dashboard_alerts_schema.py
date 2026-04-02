@@ -1,17 +1,17 @@
-import pytest
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 
+import pytest
 from pydantic import ValidationError
 
 from app.schemas.admin_dashboard_alerts import (
+    DashboardOccupiedVehicleSchema,
     DashboardUserAlertSchema,
     DashboardVehicleIssueAlertSchema,
-    DashboardOccupiedVehicleSchema,
-    UsersWithoutProfileResponse,
+    OccupiedVehiclesResponse,
     UsersWithoutContractResponse,
     UsersWithoutDriverLicenseResponse,
+    UsersWithoutProfileResponse,
     VehiclesWithOpenIssuesResponse,
-    OccupiedVehiclesResponse,
 )
 
 
@@ -22,6 +22,7 @@ def now_utc():
 # =========================
 # DashboardUserAlertSchema
 # =========================
+
 
 def test_dashboard_user_alert_valid():
     data = {
@@ -65,6 +66,7 @@ def test_dashboard_user_alert_extra_field_forbidden():
 # =========================
 # DashboardVehicleIssueAlertSchema
 # =========================
+
 
 def test_dashboard_vehicle_issue_alert_valid():
     obj = DashboardVehicleIssueAlertSchema(
@@ -111,6 +113,7 @@ def test_dashboard_vehicle_issue_alert_extra_forbidden():
 # DashboardOccupiedVehicleSchema
 # =========================
 
+
 def test_dashboard_occupied_vehicle_valid():
     obj = DashboardOccupiedVehicleSchema(
         assignment_id=100,
@@ -144,6 +147,7 @@ def test_dashboard_occupied_vehicle_extra_forbidden():
 # =========================
 # Response wrappers
 # =========================
+
 
 def test_users_without_profile_response():
     user = DashboardUserAlertSchema(

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -145,7 +145,7 @@ def test_leave_request_review_schema_extra_forbidden():
 
 
 def test_leave_request_item_schema_valid():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = LeaveRequestItemSchema(
         id=1,
@@ -185,7 +185,7 @@ def test_leave_request_item_schema_extra_forbidden():
             status="pending",
             reviewed_by_admin_id=None,
             reviewed_at=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             extra_field="boom",
         )
 
@@ -202,7 +202,7 @@ def test_leave_request_list_response_schema_valid():
         status="pending",
         reviewed_by_admin_id=None,
         reviewed_at=None,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     obj = LeaveRequestListResponseSchema(requests=[item])
@@ -225,7 +225,7 @@ def test_leave_request_list_response_schema_extra_forbidden():
 
 
 def test_leave_request_create_response_schema_valid():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = LeaveRequestCreateResponseSchema(
         id=1,
@@ -253,13 +253,13 @@ def test_leave_request_create_response_schema_extra_forbidden():
             end_date=date(2026, 4, 10),
             reason="Concediu",
             status="pending",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             extra_field="boom",
         )
 
 
 def test_leave_request_review_response_schema_valid():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = LeaveRequestReviewResponseSchema(
         id=1,
@@ -292,6 +292,6 @@ def test_leave_request_review_response_schema_extra_forbidden():
             id=1,
             status="approved",
             reviewed_by_admin_id=99,
-            reviewed_at=datetime.now(timezone.utc),
+            reviewed_at=datetime.now(UTC),
             extra_field="boom",
         )

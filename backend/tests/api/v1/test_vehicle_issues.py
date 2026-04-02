@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -118,8 +118,8 @@ def make_issue(
         assigned_mechanic_id=assigned_mechanic_id,
         scheduled_for=scheduled_for,
         scheduled_location=scheduled_location,
-        created_at=created_at or datetime(2026, 3, 30, 10, 0, tzinfo=timezone.utc),
-        updated_at=updated_at or datetime(2026, 3, 30, 11, 0, tzinfo=timezone.utc),
+        created_at=created_at or datetime(2026, 3, 30, 10, 0, tzinfo=UTC),
+        updated_at=updated_at or datetime(2026, 3, 30, 11, 0, tzinfo=UTC),
     )
 
 
@@ -370,7 +370,7 @@ async def test_create_vehicle_issue(monkeypatch):
 
     async def refresh_side_effect(obj):
         obj.id = 200
-        obj.created_at = datetime(2026, 3, 30, 12, 0, tzinfo=timezone.utc)
+        obj.created_at = datetime(2026, 3, 30, 12, 0, tzinfo=UTC)
 
     db.refresh.side_effect = refresh_side_effect
 
@@ -415,9 +415,11 @@ async def test_list_my_vehicle_issues(monkeypatch):
     )
 
     db = AsyncMock()
-    db.execute.return_value = FakeResult([
-        (issue, vehicle, user),
-    ])
+    db.execute.return_value = FakeResult(
+        [
+            (issue, vehicle, user),
+        ]
+    )
 
     result = await list_my_vehicle_issues(
         code="EMP001",
@@ -443,9 +445,11 @@ async def test_list_vehicle_issues():
     )
 
     db = AsyncMock()
-    db.execute.return_value = FakeResult([
-        (issue, vehicle, user),
-    ])
+    db.execute.return_value = FakeResult(
+        [
+            (issue, vehicle, user),
+        ]
+    )
 
     result = await list_vehicle_issues(
         status_filter="resolved",
@@ -472,9 +476,11 @@ async def test_list_vehicle_issues_for_mechanic():
     )
 
     db = AsyncMock()
-    db.execute.return_value = FakeResult([
-        (issue, vehicle, user),
-    ])
+    db.execute.return_value = FakeResult(
+        [
+            (issue, vehicle, user),
+        ]
+    )
 
     result = await list_vehicle_issues_for_mechanic(
         status_filter="in_progress",
@@ -560,7 +566,7 @@ async def test_update_vehicle_issue_by_mechanic(monkeypatch):
     )
 
     db = AsyncMock()
-    scheduled_for = datetime(2026, 4, 2, 9, 30, tzinfo=timezone.utc)
+    scheduled_for = datetime(2026, 4, 2, 9, 30, tzinfo=UTC)
     payload = make_mechanic_update_payload(
         status="in_progress",
         scheduled_for=scheduled_for,
@@ -587,3 +593,95 @@ async def test_update_vehicle_issue_by_mechanic(monkeypatch):
 
     db.commit.assert_awaited_once()
     db.refresh.assert_awaited_once_with(issue)
+
+
+@pytest.mark.asyncio
+async def test_list_my_vehicle_issues_with_status_filter(monkeypatch):
+    user = SimpleNamespace(id=1, is_active=True)
+    issue = SimpleNamespace()
+    vehicle = SimpleNamespace()
+    reported_user = SimpleNamespace()
+
+    fake_result = Mock()
+    fake_result.all.return_value = [(issue, vehicle, reported_user)]
+
+    db = AsyncMock()
+    db.execute.return_value = fake_result
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.vehicle_issues.get_user_by_code_or_404",
+        AsyncMock(return_value=user),
+    )
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.vehicle_issues.ensure_user_is_active",
+        lambda u: None,
+    )
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.vehicle_issues.build_issue_list_item",
+        lambda i, v, u: {
+            "id": 1,
+            "vehicle_id": 1,
+            "vehicle_license_plate": "B-123-XYZ",
+            "vehicle_brand": "Dacia",
+            "vehicle_model": "Logan",
+            "reported_by_user_id": 1,
+            "reported_by_name": "Ana Popescu",
+            "status": "open",
+            "need_brakes": False,
+            "need_tires": False,
+            "need_oil": False,
+            "created_at": "2026-01-01T08:00:00Z",
+            "updated_at": "2026-01-01T08:00:00Z",
+        },
+    )
+
+    result = await list_my_vehicle_issues(
+        code="EMP001",
+        status_filter="open",
+        db=db,
+    )
+
+    assert len(result.issues) == 1
+    db.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_list_vehicle_issues_filters_by_vehicle_and_reporter(monkeypatch):
+    issue = SimpleNamespace()
+    vehicle = SimpleNamespace()
+    user = SimpleNamespace()
+
+    fake_result = Mock()
+    fake_result.all.return_value = [(issue, vehicle, user)]
+
+    db = AsyncMock()
+    db.execute.return_value = fake_result
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.vehicle_issues.build_issue_list_item",
+        lambda i, v, u: {
+            "id": 1,
+            "vehicle_id": 1,
+            "vehicle_license_plate": "B-123-XYZ",
+            "vehicle_brand": "Dacia",
+            "vehicle_model": "Logan",
+            "reported_by_user_id": 1,
+            "reported_by_name": "Ana Popescu",
+            "status": "open",
+            "need_brakes": False,
+            "need_tires": False,
+            "need_oil": False,
+            "created_at": "2026-01-01T08:00:00Z",
+            "updated_at": "2026-01-01T08:00:00Z",
+        },
+    )
+    result = await list_vehicle_issues(
+        status_filter=None,
+        vehicle_id=2,
+        reported_by_user_id=3,
+        db=db,
+        _=True,
+    )
+
+    assert len(result.issues) == 1
+    db.execute.assert_called_once()

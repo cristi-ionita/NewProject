@@ -15,9 +15,7 @@ def test_database_url_builds_correctly(monkeypatch):
 
     settings = Settings(_env_file=None)
 
-    assert settings.database_url == (
-        "postgresql+asyncpg://user:pass@localhost:5432/test_db"
-    )
+    assert settings.database_url == ("postgresql+asyncpg://user:pass@localhost:5432/test_db")
 
 
 def test_default_values(monkeypatch):

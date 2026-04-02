@@ -1,48 +1,79 @@
-# CarsManagement
+# 🚗 Cars Management System
 
-CarsManagement este o aplicație pentru administrarea unei flote auto și a utilizatorilor care folosesc mașinile din companie.
+Full-stack application for managing employees, vehicles, documents, and internal workflows.
 
-## Funcționalități principale
+Built with:
 
-- autentificare utilizator (cod + PIN)
-- autentificare admin
-- management utilizatori
-- management vehicule
-- sesiuni active pentru mașini
-- preluare și predare vehicul
-- istoric vehicule
-- raportare probleme
-- profil angajat (EmployeeProfile)
+- **Backend:** FastAPI + PostgreSQL + Alembic
+- **Frontend:** Next.js (App Router) + React + Tailwind
+- **Testing:** Pytest (backend), Vitest + Testing Library (frontend)
+- **Infrastructure:** Docker (Docker Compose)
 
-## Structură proiect
+---
 
-frontend/
-backend/
+## ✨ Features
 
-## Tehnologii
+### 👤 Users
+
+- Create users (employee / mechanic)
+- Activate / deactivate users
+- Reset PIN
+- Unique access via code
+
+### 🔐 Authentication
+
+- Admin login (password)
+- Employee login (PIN)
+- Mechanic login (PIN)
+
+### 📄 Documents
+
+- Upload personal documents
+- Filter by type/category
+- Expiration support
+
+### 🚗 Vehicles & Issues
+
+- Assign vehicles
+- Report issues
+- Track maintenance
+
+### 📅 Leave Management
+
+- Request leave
+- Track active leave users
+- Filter users by status
+
+---
+
+## 🧱 Tech Stack
 
 ### Backend
 
 - FastAPI
-- SQLAlchemy Async
+- SQLAlchemy (async)
 - PostgreSQL
-- Alembic
-- Poetry
-- Pytest
+- Alembic (migrations)
 
 ### Frontend
 
-- React
-- TypeScript
-- Vite
-- React Router
+- Next.js (App Router)
+- React 19
+- Tailwind CSS
+- React Query
 
-## Pornire proiect
+### Testing
 
-### Backend
+- Pytest (integration tests)
+- Vitest + Testing Library (UI tests)
+
+---
+
+## 🚀 Getting Started
+
+### 1. Clone project
 
 ```bash
-cd backend
-poetry install
-poetry run uvicorn app.main:app --reload
+git clone <repo-url>
+cd CarsManagement
 ```

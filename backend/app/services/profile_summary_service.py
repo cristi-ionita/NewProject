@@ -18,9 +18,7 @@ class ProfileSummaryService:
         db: AsyncSession,
         user_id: int,
     ) -> User | None:
-        user_result = await db.execute(
-            select(User).where(User.id == user_id)
-        )
+        user_result = await db.execute(select(User).where(User.id == user_id))
         return user_result.scalar_one_or_none()
 
     @staticmethod
@@ -28,9 +26,7 @@ class ProfileSummaryService:
         db: AsyncSession,
         code: str,
     ) -> User | None:
-        user_result = await db.execute(
-            select(User).where(User.unique_code == code.strip())
-        )
+        user_result = await db.execute(select(User).where(User.unique_code == code.strip()))
         return user_result.scalar_one_or_none()
 
     @staticmethod
@@ -48,9 +44,7 @@ class ProfileSummaryService:
         db: AsyncSession,
         user_id: int,
     ) -> list[Document]:
-        documents_result = await db.execute(
-            select(Document).where(Document.user_id == user_id)
-        )
+        documents_result = await db.execute(select(Document).where(Document.user_id == user_id))
         return list(documents_result.scalars().all())
 
     @staticmethod
@@ -59,27 +53,16 @@ class ProfileSummaryService:
     ) -> ProfileDocumentsSummarySchema:
         total_documents = len(documents)
         personal_documents = sum(
-            1
-            for document in documents
-            if document.category == DocumentCategory.PERSONAL
+            1 for document in documents if document.category == DocumentCategory.PERSONAL
         )
         company_documents = sum(
-            1
-            for document in documents
-            if document.category == DocumentCategory.COMPANY
+            1 for document in documents if document.category == DocumentCategory.COMPANY
         )
 
-        has_contract = any(
-            document.type == DocumentType.CONTRACT
-            for document in documents
-        )
-        has_payslip = any(
-            document.type == DocumentType.PAYSLIP
-            for document in documents
-        )
+        has_contract = any(document.type == DocumentType.CONTRACT for document in documents)
+        has_payslip = any(document.type == DocumentType.PAYSLIP for document in documents)
         has_driver_license = any(
-            document.type == DocumentType.DRIVER_LICENSE
-            for document in documents
+            document.type == DocumentType.DRIVER_LICENSE for document in documents
         )
 
         return ProfileDocumentsSummarySchema(

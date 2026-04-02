@@ -1,11 +1,12 @@
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import pytest
 from fastapi import HTTPException
 
 from app.api.v1.endpoints.auth import (
+    AdminLoginRequestSchema,
     admin_login,
     end_session,
     get_active_assignment_for_user,
@@ -13,8 +14,8 @@ from app.api.v1.endpoints.auth import (
     get_active_session,
     get_user_by_login_identifier,
     login,
+    mechanic_login,
     start_session,
-    AdminLoginRequestSchema,
 )
 from app.db.models.vehicle_assignment import AssignmentStatus
 
@@ -75,7 +76,7 @@ def make_assignment(
         user_id=user_id,
         vehicle_id=vehicle_id,
         status=status,
-        started_at=started_at or datetime(2026, 3, 30, 8, 0, tzinfo=timezone.utc),
+        started_at=started_at or datetime(2026, 3, 30, 8, 0, tzinfo=UTC),
         ended_at=ended_at,
         vehicle=vehicle,
     )
@@ -426,7 +427,7 @@ async def test_start_session_success(monkeypatch):
         user_id=1,
         vehicle_id=10,
         status=AssignmentStatus.ACTIVE,
-        started_at=datetime(2026, 3, 30, 8, 0, tzinfo=timezone.utc),
+        started_at=datetime(2026, 3, 30, 8, 0, tzinfo=UTC),
     )
 
     async def refresh_side_effect(obj):
@@ -613,3 +614,108 @@ async def test_end_session_success(monkeypatch):
 
     assert db.refresh.await_count == 2
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_mechanic_login_user_not_found(monkeypatch):
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.auth.get_user_by_login_identifier",
+        AsyncMock(return_value=None),
+    )
+
+    payload = SimpleNamespace(identifier="MECH001", pin="1234")
+    db = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc:
+        await mechanic_login(payload, db)
+
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_mechanic_login_not_mechanic(monkeypatch):
+    user = make_user(1, role="employee", pin_hash="hashed-1234")
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.auth.get_user_by_login_identifier",
+        AsyncMock(return_value=user),
+    )
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.auth.ensure_user_is_active",
+        lambda user: None,
+    )
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.auth.hash_pin",
+        lambda pin: "hashed-1234",
+    )
+
+    payload = SimpleNamespace(identifier="EMP001", pin="1234")
+    db = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc:
+        await mechanic_login(payload, db)
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_mechanic_login_success(monkeypatch):
+    user = make_user(
+        1,
+        full_name="Ion Popescu",
+        shift_number="1",
+        unique_code="MECH001",
+        role="mechanic",
+        pin_hash="hashed-1234",
+    )
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.auth.get_user_by_login_identifier",
+        AsyncMock(return_value=user),
+    )
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.auth.ensure_user_is_active",
+        lambda user: None,
+    )
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.auth.hash_pin",
+        lambda pin: "hashed-1234",
+    )
+
+    payload = SimpleNamespace(identifier="MECH001", pin="1234")
+    db = AsyncMock()
+
+    result = await mechanic_login(payload, db)
+
+    assert result.user_id == 1
+    assert result.role == "mechanic"
+
+
+@pytest.mark.asyncio
+async def test_mechanic_login_invalid_pin(monkeypatch):
+    user = make_user(
+        1,
+        role="mechanic",
+        pin_hash="correct-hash",
+    )
+
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.auth.get_user_by_login_identifier",
+        AsyncMock(return_value=user),
+    )
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.auth.ensure_user_is_active",
+        lambda user: None,
+    )
+    monkeypatch.setattr(
+        "app.api.v1.endpoints.auth.hash_pin",
+        lambda pin: "wrong-hash",
+    )
+
+    payload = SimpleNamespace(identifier="MECH001", pin="1234")
+    db = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc:
+        await mechanic_login(payload, db)
+
+    assert exc.value.status_code == 401

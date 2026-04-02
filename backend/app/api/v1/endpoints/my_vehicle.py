@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,11 +24,10 @@ router = APIRouter(prefix="/my-vehicle", tags=["my-vehicle"])
 # HELPERS
 # =========================
 
+
 async def get_user_by_code_or_404(db: AsyncSession, code: str) -> User:
     user = (
-        await db.execute(
-            select(User).where(User.unique_code == code.strip())
-        )
+        await db.execute(select(User).where(User.unique_code == code.strip()))
     ).scalar_one_or_none()
 
     if user is None:
@@ -72,6 +71,7 @@ async def get_handover_report(
 # =========================
 # BUILDERS
 # =========================
+
 
 def build_handover_start(report: VehicleHandoverReport) -> MyVehicleHandoverStartSchema:
     is_completed = (
@@ -136,6 +136,7 @@ def build_issue(issue: VehicleIssue) -> MyVehicleIssueSchema:
 # ENDPOINT
 # =========================
 
+
 @router.get("/{code}", response_model=MyVehicleResponseSchema)
 async def get_my_vehicle_page(
     code: str,
@@ -162,15 +163,19 @@ async def get_my_vehicle_page(
     report = await get_handover_report(db, assignment.id)
 
     issues = (
-        await db.execute(
-            select(VehicleIssue)
-            .where(
-                VehicleIssue.vehicle_id == assignment.vehicle_id,
-                VehicleIssue.status != VehicleIssueStatus.RESOLVED,
+        (
+            await db.execute(
+                select(VehicleIssue)
+                .where(
+                    VehicleIssue.vehicle_id == assignment.vehicle_id,
+                    VehicleIssue.status != VehicleIssueStatus.RESOLVED,
+                )
+                .order_by(VehicleIssue.created_at.desc())
             )
-            .order_by(VehicleIssue.created_at.desc())
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return MyVehicleResponseSchema(
         user=MyVehicleUserSchema.model_validate(user),

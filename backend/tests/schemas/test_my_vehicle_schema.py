@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -148,7 +148,7 @@ def test_my_vehicle_vehicle_schema_model_validate_from_attributes():
 
 
 def test_my_vehicle_assignment_schema_valid():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = MyVehicleAssignmentSchema(
         id=100,
@@ -164,8 +164,8 @@ def test_my_vehicle_assignment_schema_valid():
 
 
 def test_my_vehicle_assignment_schema_with_ended_at():
-    started = datetime.now(timezone.utc)
-    ended = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
+    ended = datetime.now(UTC)
 
     obj = MyVehicleAssignmentSchema(
         id=100,
@@ -184,7 +184,7 @@ def test_my_vehicle_assignment_schema_extra_forbidden():
         MyVehicleAssignmentSchema(
             id=100,
             status="active",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             extra_field="boom",
         )
 
@@ -298,8 +298,8 @@ def test_my_vehicle_handover_end_schema_extra_forbidden():
 
 
 def test_my_vehicle_issue_schema_valid():
-    created = datetime.now(timezone.utc)
-    updated = datetime.now(timezone.utc)
+    created = datetime.now(UTC)
+    updated = datetime.now(UTC)
 
     obj = MyVehicleIssueSchema(
         id=1,
@@ -327,8 +327,8 @@ def test_my_vehicle_issue_schema_valid():
 
 
 def test_my_vehicle_issue_schema_optional_fields():
-    created = datetime.now(timezone.utc)
-    updated = datetime.now(timezone.utc)
+    created = datetime.now(UTC)
+    updated = datetime.now(UTC)
 
     obj = MyVehicleIssueSchema(
         id=1,
@@ -359,14 +359,14 @@ def test_my_vehicle_issue_schema_extra_forbidden():
             need_oil=False,
             dashboard_checks=None,
             other_problems=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             extra_field="boom",
         )
 
 
 def test_my_vehicle_response_schema_valid_with_full_data():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = MyVehicleResponseSchema(
         user=MyVehicleUserSchema(

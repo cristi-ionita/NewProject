@@ -123,7 +123,7 @@ async def create_user(
     _: bool = Depends(get_current_admin),
 ):
     full_name = normalize_full_name(payload.full_name)
-    role = normalize_role(payload.role)
+    role = normalize_role(getattr(payload, "role", "employee"))
     pin = validate_pin(payload.pin)
 
     shift_number: str | None = None
@@ -160,7 +160,7 @@ async def update_user(
     user = await get_user_or_404(db, user_id)
 
     full_name = normalize_full_name(payload.full_name)
-    role = normalize_role(payload.role)
+    role = normalize_role(getattr(payload, "role", getattr(user, "role", "employee")))
 
     await ensure_unique_full_name(db, full_name, user_id)
 
@@ -230,7 +230,7 @@ async def activate_user(
 ):
     user = await get_user_or_404(db, user_id)
 
-    if user.role != "mechanic":
+    if getattr(user, "role", "employee") != "mechanic":
         shift_number = validate_shift_number(user.shift_number or "")
         await ensure_shift_is_available(db, shift_number, user_id)
 

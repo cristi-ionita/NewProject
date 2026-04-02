@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -121,7 +121,7 @@ def test_active_session_response_schema_without_active_session():
 
 
 def test_active_session_response_schema_with_active_session():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = ActiveSessionResponseSchema(
         has_active_session=True,
@@ -204,7 +204,7 @@ def test_start_session_request_schema_extra_forbidden():
 
 
 def test_start_session_response_schema_valid():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = StartSessionResponseSchema(
         assignment_id=100,
@@ -233,7 +233,7 @@ def test_start_session_response_schema_extra_forbidden():
             user_name="Ana Popescu",
             vehicle_id=10,
             license_plate="B-123-XYZ",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             status="active",
             extra_field="boom",
         )
@@ -270,7 +270,7 @@ def test_end_session_request_schema_extra_forbidden():
 
 
 def test_end_session_response_schema_valid():
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     obj = EndSessionResponseSchema(
         assignment_id=100,
@@ -293,7 +293,23 @@ def test_end_session_response_schema_extra_forbidden():
             assignment_id=100,
             user_id=1,
             vehicle_id=10,
-            ended_at=datetime.now(timezone.utc),
+            ended_at=datetime.now(UTC),
             status="closed",
             extra_field="boom",
         )
+
+
+
+
+def test_login_schema_pin_empty():
+    with pytest.raises(ValidationError) as exc:
+        LoginRequestSchema(identifier="EMP001", pin="   ")
+
+    assert "PIN is required." in str(exc.value)
+
+
+def test_login_schema_pin_not_digits():
+    with pytest.raises(ValidationError) as exc:
+        LoginRequestSchema(identifier="EMP001", pin="12a4")
+
+    assert "PIN must contain only digits." in str(exc.value)

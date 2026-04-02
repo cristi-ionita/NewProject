@@ -2,11 +2,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.handover import (
+    MAX_REALISTIC_MILEAGE,
     HandoverEndRequestSchema,
     HandoverEndResponseSchema,
     HandoverStartRequestSchema,
     HandoverStartResponseSchema,
-    MAX_REALISTIC_MILEAGE,
 )
 
 

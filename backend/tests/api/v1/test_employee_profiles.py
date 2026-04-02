@@ -227,9 +227,7 @@ async def test_update_employee_profile_duplicate_username(monkeypatch):
         FakeScalarResult(existing_user),
     ]
 
-    payload = SimpleNamespace(
-        model_dump=lambda exclude_unset=True: {"username": " NEWCODE "}
-    )
+    payload = SimpleNamespace(model_dump=lambda exclude_unset=True: {"username": " NEWCODE "})
 
     with pytest.raises(HTTPException) as exc:
         await update_employee_profile(user_id=1, payload=payload, db=db, _=True)
@@ -251,9 +249,7 @@ async def test_update_employee_profile_invalid_pin(monkeypatch):
     db = AsyncMock()
     db.execute.return_value = FakeScalarResult(user)
 
-    payload = SimpleNamespace(
-        model_dump=lambda exclude_unset=True: {"pin": "12ab"}
-    )
+    payload = SimpleNamespace(model_dump=lambda exclude_unset=True: {"pin": "12ab"})
 
     with pytest.raises(HTTPException) as exc:
         await update_employee_profile(user_id=1, payload=payload, db=db, _=True)
@@ -337,9 +333,7 @@ async def test_update_my_employee_profile_empty_username(monkeypatch):
     )
 
     db = AsyncMock()
-    payload = SimpleNamespace(
-        model_dump=lambda exclude_unset=True: {"username": "   "}
-    )
+    payload = SimpleNamespace(model_dump=lambda exclude_unset=True: {"username": "   "})
 
     with pytest.raises(HTTPException) as exc:
         await update_my_employee_profile(code="EMP001", payload=payload, db=db)
@@ -361,9 +355,7 @@ async def test_update_my_employee_profile_duplicate_username(monkeypatch):
     db = AsyncMock()
     db.execute.return_value = FakeScalarResult(existing_user)
 
-    payload = SimpleNamespace(
-        model_dump=lambda exclude_unset=True: {"username": "USED"}
-    )
+    payload = SimpleNamespace(model_dump=lambda exclude_unset=True: {"username": "USED"})
 
     with pytest.raises(HTTPException) as exc:
         await update_my_employee_profile(code="EMP001", payload=payload, db=db)
@@ -382,9 +374,7 @@ async def test_update_my_employee_profile_invalid_pin(monkeypatch):
     )
 
     db = AsyncMock()
-    payload = SimpleNamespace(
-        model_dump=lambda exclude_unset=True: {"pin": "12"}
-    )
+    payload = SimpleNamespace(model_dump=lambda exclude_unset=True: {"pin": "12"})
 
     with pytest.raises(HTTPException) as exc:
         await update_my_employee_profile(code="EMP001", payload=payload, db=db)

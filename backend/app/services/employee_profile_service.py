@@ -15,9 +15,7 @@ class EmployeeProfileService:
         db: AsyncSession,
         user_id: int,
     ) -> EmployeeProfile | None:
-        result = await db.execute(
-            select(EmployeeProfile).where(EmployeeProfile.user_id == user_id)
-        )
+        result = await db.execute(select(EmployeeProfile).where(EmployeeProfile.user_id == user_id))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -38,9 +36,7 @@ class EmployeeProfileService:
         username: str,
         current_user_id: int,
     ) -> None:
-        result = await db.execute(
-            select(User).where(User.username == username)
-        )
+        result = await db.execute(select(User).where(User.username == username))
         existing_user = result.scalar_one_or_none()
 
         if existing_user is not None and existing_user.id != current_user_id:

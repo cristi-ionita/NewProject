@@ -1,7 +1,8 @@
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+
+import pytest
 
 from app.api.v1.endpoints.admin_dashboard_alerts import (
     build_user_alert,
@@ -137,7 +138,8 @@ async def test_get_users_without_driver_license():
 
 
 @pytest.mark.asyncio
-async def test_get_vehicles_with_open_issues_returns_only_vehicles_with_open_or_in_progress_issues():
+async def test_get_vehicles_with_open_issues_returns_only_vehicles_with_open_or_in_progress_issues(
+):
     vehicle_1 = make_vehicle(1, "B-100-AAA", "Dacia", "Logan")
     vehicle_2 = make_vehicle(2, "B-200-BBB", "VW", "Golf")
     vehicle_3 = make_vehicle(3, "B-300-CCC", "Ford", "Focus")
@@ -145,9 +147,15 @@ async def test_get_vehicles_with_open_issues_returns_only_vehicles_with_open_or_
     db = AsyncMock()
     db.execute.return_value = FakeResult([vehicle_1, vehicle_2, vehicle_3])
     db.scalar.side_effect = [
-        2, 1, "2026-03-20T10:00:00Z",
-        0, 0, None,
-        0, 3, "2026-03-22T08:30:00Z",
+        2,
+        1,
+        "2026-03-20T10:00:00Z",
+        0,
+        0,
+        None,
+        0,
+        3,
+        "2026-03-22T08:30:00Z",
     ]
 
     response = await get_vehicles_with_open_issues(db=db, _=True)
@@ -176,8 +184,12 @@ async def test_get_vehicles_with_open_issues_returns_empty_when_no_vehicle_has_i
     db = AsyncMock()
     db.execute.return_value = FakeResult([vehicle_1, vehicle_2])
     db.scalar.side_effect = [
-        0, 0, None,
-        0, 0, None,
+        0,
+        0,
+        None,
+        0,
+        0,
+        None,
     ]
 
     response = await get_vehicles_with_open_issues(db=db, _=True)
@@ -192,9 +204,11 @@ async def test_get_occupied_vehicles_returns_active_assignments():
     assignment = make_assignment(30, "2026-03-25T09:00:00Z")
 
     db = AsyncMock()
-    db.execute.return_value = FakeResult([
-        (assignment, vehicle, user),
-    ])
+    db.execute.return_value = FakeResult(
+        [
+            (assignment, vehicle, user),
+        ]
+    )
 
     response = await get_occupied_vehicles(db=db, _=True)
 
@@ -206,4 +220,4 @@ async def test_get_occupied_vehicles_returns_active_assignments():
     assert item.license_plate == "B-999-XYZ"
     assert item.user_id == 20
     assert item.user_name == "Elena Ionescu"
-    assert item.started_at == datetime(2026, 3, 25, 9, 0, tzinfo=timezone.utc)
+    assert item.started_at == datetime(2026, 3, 25, 9, 0, tzinfo=UTC)

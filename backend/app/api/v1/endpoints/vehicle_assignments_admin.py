@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import desc, select
@@ -23,20 +23,19 @@ router = APIRouter(prefix="/admin-assignments", tags=["admin-assignments"])
 # HELPERS
 # =========================
 
+
 def parse_assignment_status(value: str) -> AssignmentStatus:
     try:
         return AssignmentStatus[value.strip().upper()]
-    except KeyError:
+    except KeyError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Status invalid.",
-        )
+        ) from err
 
 
 async def get_user_or_404(db: AsyncSession, user_id: int) -> User:
-    user = (
-        await db.execute(select(User).where(User.id == user_id))
-    ).scalar_one_or_none()
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
 
     if user is None:
         raise HTTPException(404, "User not found.")
@@ -60,9 +59,7 @@ async def get_assignment_or_404(
     assignment_id: int,
 ) -> VehicleAssignment:
     assignment = (
-        await db.execute(
-            select(VehicleAssignment).where(VehicleAssignment.id == assignment_id)
-        )
+        await db.execute(select(VehicleAssignment).where(VehicleAssignment.id == assignment_id))
     ).scalar_one_or_none()
 
     if assignment is None:
@@ -121,6 +118,7 @@ def build_assignment_read(
 # =========================
 # ENDPOINTS
 # =========================
+
 
 @router.post(
     "",
@@ -181,9 +179,7 @@ async def list_assignments(
     )
 
     if status_filter:
-        query = query.where(
-            VehicleAssignment.status == parse_assignment_status(status_filter)
-        )
+        query = query.where(VehicleAssignment.status == parse_assignment_status(status_filter))
 
     if user_id is not None:
         query = query.where(VehicleAssignment.user_id == user_id)
@@ -219,7 +215,7 @@ async def close_assignment(
         )
 
     assignment.status = AssignmentStatus.CLOSED
-    assignment.ended_at = datetime.now(timezone.utc)
+    assignment.ended_at = datetime.now(UTC)
 
     await db.commit()
     await db.refresh(assignment)

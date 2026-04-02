@@ -1,6 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
 MAX_REALISTIC_MILEAGE = 5_000_000
 
 

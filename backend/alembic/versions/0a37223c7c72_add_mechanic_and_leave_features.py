@@ -5,10 +5,10 @@ Revises: 331e4aa03b7f
 Create Date: 2026-03-30 01:21:33.521967
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
 
 revision = "0a37223c7c72"
 down_revision = "331e4aa03b7f"
@@ -43,7 +43,12 @@ def upgrade() -> None:
         sa.Column("status", leave_status, nullable=False, server_default="pending"),
         sa.Column("reviewed_by_admin_id", sa.Integer(), nullable=True),
         sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["reviewed_by_admin_id"], ["users.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),

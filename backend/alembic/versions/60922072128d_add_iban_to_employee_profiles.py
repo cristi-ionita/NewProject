@@ -1,7 +1,8 @@
 """add username to users"""
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # 🔥 IMPORTANT: păstrează revision-ul tău existent
 revision = "60922072128d"

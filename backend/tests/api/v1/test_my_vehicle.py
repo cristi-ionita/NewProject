@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -93,7 +93,7 @@ def make_assignment(
         user_id=user_id,
         vehicle_id=vehicle_id,
         status=assignment_status,
-        started_at=started_at or datetime(2026, 3, 30, 8, 0, tzinfo=timezone.utc),
+        started_at=started_at or datetime(2026, 3, 30, 8, 0, tzinfo=UTC),
         ended_at=ended_at,
         vehicle=vehicle,
     )
@@ -155,8 +155,8 @@ def make_issue_obj(
         need_oil=need_oil,
         dashboard_checks=dashboard_checks,
         other_problems=other_problems,
-        created_at=created_at or datetime(2026, 3, 29, 10, 0, tzinfo=timezone.utc),
-        updated_at=updated_at or datetime(2026, 3, 29, 12, 0, tzinfo=timezone.utc),
+        created_at=created_at or datetime(2026, 3, 29, 10, 0, tzinfo=UTC),
+        updated_at=updated_at or datetime(2026, 3, 29, 12, 0, tzinfo=UTC),
     )
 
 

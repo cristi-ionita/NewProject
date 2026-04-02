@@ -5,15 +5,11 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from app.core.config import settings
+from app.core.config import get_settings
 from app.db.base import Base
-from app.db.models.user import User
-from app.db.models.vehicle import Vehicle
-from app.db.models.vehicle_assignment import VehicleAssignment
-from app.db.models.vehicle_handover_report import VehicleHandoverReport
-from app.db.models.vehicle_issue import VehicleIssue
 
 config = context.config
+settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
 if config.config_file_name is not None:

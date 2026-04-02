@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
-from pathlib import Path
 import shutil
 import uuid
+from datetime import datetime
+from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -20,9 +20,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import (
+    ensure_user_is_active,
     get_current_admin,
     get_user_by_code_or_404,
-    ensure_user_is_active,
 )
 from app.core.constants import ALLOWED_DOCUMENT_CONTENT_TYPES
 from app.db.models.document import (
@@ -45,24 +45,25 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # HELPERS
 # =========================
 
+
 def parse_document_type(value: str) -> DocumentType:
     try:
         return DocumentType[value.strip().upper()]
-    except KeyError:
+    except KeyError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Tip document invalid.",
-        )
+        ) from err
 
 
 def parse_document_category(value: str) -> DocumentCategory:
     try:
         return DocumentCategory[value.strip().upper()]
-    except KeyError:
+    except KeyError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Categorie document invalidă.",
-        )
+        ) from err
 
 
 def ensure_allowed_file(upload_file: UploadFile) -> None:
@@ -140,6 +141,7 @@ def build_document_query(user_id: int, category: str | None, type: str | None):
 # =========================
 # ENDPOINTS
 # =========================
+
 
 @router.get("/admin/user/{user_id}", response_model=list[DocumentReadSchema])
 async def get_user_documents_for_admin(

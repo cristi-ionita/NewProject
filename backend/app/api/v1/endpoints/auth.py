@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -6,11 +6,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import (
-    get_current_admin,
-    get_user_by_code_or_404,
     ensure_user_is_active,
+    get_user_by_code_or_404,
 )
-from app.core.config import settings
+from app.core.config import get_settings
 from app.core.security import generate_admin_token, hash_pin
 from app.db.models.user import User
 from app.db.models.vehicle import Vehicle
@@ -26,6 +25,8 @@ from app.schemas.auth import (
     StartSessionRequestSchema,
     StartSessionResponseSchema,
 )
+
+settings = get_settings()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -129,6 +130,7 @@ async def login(
         role=user.role,
     )
 
+
 @router.post("/mechanic-login", response_model=LoginResponseSchema)
 async def mechanic_login(
     payload: LoginRequestSchema,
@@ -163,6 +165,7 @@ async def mechanic_login(
         unique_code=user.unique_code,
         role=user.role,
     )
+
 
 @router.get("/active-session/{code}", response_model=ActiveSessionResponseSchema)
 async def get_active_session(
@@ -200,9 +203,7 @@ async def start_session(
     ensure_user_is_active(user)
 
     vehicle_result = await db.execute(
-        select(Vehicle).where(
-            Vehicle.license_plate == payload.license_plate.strip()
-        )
+        select(Vehicle).where(Vehicle.license_plate == payload.license_plate.strip())
     )
     vehicle = vehicle_result.scalar_one_or_none()
 
@@ -272,12 +273,14 @@ async def end_session(
             detail="Completează predarea înainte.",
         )
 
-    if not all([
-        report.mileage_end,
-        report.dashboard_warnings_end,
-        report.damage_notes_end,
-        report.notes_end,
-    ]):
+    if not all(
+        [
+            report.mileage_end,
+            report.dashboard_warnings_end,
+            report.damage_notes_end,
+            report.notes_end,
+        ]
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Date predare incomplete.",
@@ -293,7 +296,7 @@ async def end_session(
 
     active_assignment.vehicle.current_mileage = report.mileage_end
     active_assignment.status = AssignmentStatus.CLOSED
-    active_assignment.ended_at = datetime.now(timezone.utc)
+    active_assignment.ended_at = datetime.now(UTC)
 
     await db.commit()
     await db.refresh(active_assignment)

@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
-from app.core.config import settings
+from app.core.config import get_settings
+
+settings = get_settings()
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -12,6 +14,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://hitchiest-beulah-unsickerly.ngrok-free.dev",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:3001",

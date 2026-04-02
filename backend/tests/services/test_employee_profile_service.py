@@ -75,9 +75,7 @@ def make_create_payload(
 
 
 def make_update_payload(data: dict):
-    return SimpleNamespace(
-        model_dump=lambda exclude_unset=True: data
-    )
+    return SimpleNamespace(model_dump=lambda exclude_unset=True: data)
 
 
 @pytest.mark.asyncio
@@ -270,10 +268,12 @@ async def test_create_rolls_back_on_commit_error(monkeypatch):
 @pytest.mark.asyncio
 async def test_update_profile_fields_only():
     profile = make_profile(user_id=1)
-    payload = make_update_payload({
-        "first_name": "Elena",
-        "phone": "0799999999",
-    })
+    payload = make_update_payload(
+        {
+            "first_name": "Elena",
+            "phone": "0799999999",
+        }
+    )
 
     db = AsyncMock()
 
@@ -297,10 +297,12 @@ async def test_update_profile_fields_only():
 async def test_update_with_username_success(monkeypatch):
     profile = make_profile(user_id=1)
     user = make_user(user_id=1, username="old.username")
-    payload = make_update_payload({
-        "username": "  new.username  ",
-        "first_name": "Elena",
-    })
+    payload = make_update_payload(
+        {
+            "username": "  new.username  ",
+            "first_name": "Elena",
+        }
+    )
 
     monkeypatch.setattr(
         "app.services.employee_profile_service.EmployeeProfileService.ensure_username_available",
@@ -324,9 +326,11 @@ async def test_update_with_username_success(monkeypatch):
 async def test_update_with_username_blank_sets_none():
     profile = make_profile(user_id=1)
     user = make_user(user_id=1, username="old.username")
-    payload = make_update_payload({
-        "username": "   ",
-    })
+    payload = make_update_payload(
+        {
+            "username": "   ",
+        }
+    )
 
     db = AsyncMock()
     db.get.return_value = user
@@ -343,9 +347,11 @@ async def test_update_with_username_blank_sets_none():
 @pytest.mark.asyncio
 async def test_update_with_username_user_missing_raises():
     profile = make_profile(user_id=1)
-    payload = make_update_payload({
-        "username": "new.username",
-    })
+    payload = make_update_payload(
+        {
+            "username": "new.username",
+        }
+    )
 
     db = AsyncMock()
     db.get.return_value = None
@@ -359,9 +365,11 @@ async def test_update_with_username_user_missing_raises():
 @pytest.mark.asyncio
 async def test_update_rolls_back_on_commit_error():
     profile = make_profile(user_id=1)
-    payload = make_update_payload({
-        "first_name": "Elena",
-    })
+    payload = make_update_payload(
+        {
+            "first_name": "Elena",
+        }
+    )
 
     db = AsyncMock()
     db.commit.side_effect = Exception("db failure")
