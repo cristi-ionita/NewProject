@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from enum import Enum
 
-from sqlalchemy import Date, DateTime, ForeignKey, Text, func
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Text, func
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,6 +18,27 @@ class LeaveStatus(str, Enum):
 
 class LeaveRequest(Base):
     __tablename__ = "leave_requests"
+
+    __table_args__ = (
+        CheckConstraint(
+            "end_date >= start_date",
+            name="ck_leave_requests_end_date_after_start_date",
+        ),
+        CheckConstraint(
+            "reason IS NULL OR char_length(trim(reason)) > 0",
+            name="ck_leave_requests_reason_not_blank_if_present",
+        ),
+        CheckConstraint(
+            "("
+            "status = 'pending' AND reviewed_by_admin_id IS NULL AND reviewed_at IS NULL"
+            ") OR ("
+            "status IN ('approved', 'rejected') "
+            "AND reviewed_by_admin_id IS NOT NULL "
+            "AND reviewed_at IS NOT NULL"
+            ")",
+            name="ck_leave_requests_review_fields_match_status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 

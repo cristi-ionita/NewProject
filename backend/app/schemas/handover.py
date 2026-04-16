@@ -4,11 +4,13 @@ MAX_REALISTIC_MILEAGE = 5_000_000
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
 class HandoverStartRequestSchema(BaseSchema):
-    user_code: str = Field(..., min_length=1, max_length=50)
     mileage_start: int = Field(..., ge=0, le=MAX_REALISTIC_MILEAGE)
     dashboard_warnings_start: str = Field(..., min_length=1)
     damage_notes_start: str = Field(..., min_length=1)
@@ -20,7 +22,6 @@ class HandoverStartRequestSchema(BaseSchema):
     has_spare_wheel: bool
 
     @field_validator(
-        "user_code",
         "dashboard_warnings_start",
         "damage_notes_start",
         "notes_start",
@@ -47,14 +48,12 @@ class HandoverStartResponseSchema(BaseSchema):
 
 
 class HandoverEndRequestSchema(BaseSchema):
-    user_code: str = Field(..., min_length=1, max_length=50)
     mileage_end: int = Field(..., ge=0, le=MAX_REALISTIC_MILEAGE)
     dashboard_warnings_end: str = Field(..., min_length=1)
     damage_notes_end: str = Field(..., min_length=1)
     notes_end: str = Field(..., min_length=1)
 
     @field_validator(
-        "user_code",
         "dashboard_warnings_end",
         "damage_notes_end",
         "notes_end",

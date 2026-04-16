@@ -1,10 +1,13 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
 class CurrentSessionSchema(BaseSchema):
@@ -66,7 +69,3 @@ class VehicleSessionPageResponseSchema(BaseSchema):
     previous_handover_report: PreviousHandoverReportSchema | None = None
     handover_start: CurrentHandoverStartSchema | None = None
     handover_end: CurrentHandoverEndSchema | None = None
-
-
-class SessionAccessQuerySchema(BaseSchema):
-    user_code: str = Field(..., min_length=1, max_length=50)

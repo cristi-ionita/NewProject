@@ -1,16 +1,17 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import (
-    ensure_user_is_active,
-    get_user_by_code_or_404,
+from app.api.v1.dependencies import get_current_driver
+from app.core.rate_limit import build_rate_limit_key, login_rate_limiter
+from app.core.security import (
+    create_admin_access_token,
+    verify_password,
+    verify_pin,
 )
-from app.core.config import get_settings
-from app.core.security import generate_admin_token, hash_pin
 from app.db.models.user import User
 from app.db.models.vehicle import Vehicle
 from app.db.models.vehicle_assignment import AssignmentStatus, VehicleAssignment
@@ -25,8 +26,6 @@ from app.schemas.auth import (
     StartSessionRequestSchema,
     StartSessionResponseSchema,
 )
-
-settings = get_settings()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -89,23 +88,53 @@ async def get_user_by_login_identifier(
     return result.scalar_one_or_none()
 
 
+async def get_admin_user(db: AsyncSession) -> User | None:
+    result = await db.execute(
+        select(User)
+        .where(
+            User.role == "admin",
+            User.is_active.is_(True),
+        )
+        .order_by(User.id.asc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 @router.post("/admin-login", response_model=AdminLoginResponseSchema)
-async def admin_login(payload: AdminLoginRequestSchema) -> AdminLoginResponseSchema:
-    if payload.password != settings.ADMIN_PASSWORD:
+async def admin_login(
+    payload: AdminLoginRequestSchema,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> AdminLoginResponseSchema:
+    login_rate_limiter.hit(build_rate_limit_key(request, "admin"))
+
+    admin_user = await get_admin_user(db)
+
+    if admin_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contul de admin nu există.",
+        )
+
+    if not verify_password(payload.password, admin_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Parolă admin incorectă.",
         )
 
-    token = generate_admin_token(payload.password)
+    token = create_admin_access_token(admin_user.id)
     return AdminLoginResponseSchema(token=token)
 
 
 @router.post("/login", response_model=LoginResponseSchema)
 async def login(
     payload: LoginRequestSchema,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> LoginResponseSchema:
+    login_rate_limiter.hit(build_rate_limit_key(request, payload.identifier))
+
     user = await get_user_by_login_identifier(db, payload.identifier)
 
     if user is None:
@@ -114,9 +143,13 @@ async def login(
             detail="Utilizatorul nu există.",
         )
 
-    ensure_user_is_active(user)
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User inactiv.",
+        )
 
-    if user.pin_hash != hash_pin(payload.pin):
+    if not verify_pin(payload.pin, user.pin_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="PIN incorect.",
@@ -134,8 +167,11 @@ async def login(
 @router.post("/mechanic-login", response_model=LoginResponseSchema)
 async def mechanic_login(
     payload: LoginRequestSchema,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> LoginResponseSchema:
+    login_rate_limiter.hit(build_rate_limit_key(request, payload.identifier))
+
     user = await get_user_by_login_identifier(db, payload.identifier)
 
     if user is None:
@@ -144,9 +180,13 @@ async def mechanic_login(
             detail="Utilizatorul nu există.",
         )
 
-    ensure_user_is_active(user)
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User inactiv.",
+        )
 
-    if user.pin_hash != hash_pin(payload.pin):
+    if not verify_pin(payload.pin, user.pin_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="PIN incorect.",
@@ -167,14 +207,12 @@ async def mechanic_login(
     )
 
 
-@router.get("/active-session/{code}", response_model=ActiveSessionResponseSchema)
+@router.get("/active-session", response_model=ActiveSessionResponseSchema)
 async def get_active_session(
-    code: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_driver),
 ) -> ActiveSessionResponseSchema:
-    user = await get_user_by_code_or_404(code, db)
-
-    active_assignment = await get_active_assignment_for_user(db, user.id)
+    active_assignment = await get_active_assignment_for_user(db, current_user.id)
 
     if active_assignment is None:
         return ActiveSessionResponseSchema(has_active_session=False)
@@ -197,11 +235,8 @@ async def get_active_session(
 async def start_session(
     payload: StartSessionRequestSchema,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_driver),
 ) -> StartSessionResponseSchema:
-    user = await get_user_by_code_or_404(payload.code, db)
-
-    ensure_user_is_active(user)
-
     vehicle_result = await db.execute(
         select(Vehicle).where(Vehicle.license_plate == payload.license_plate.strip())
     )
@@ -213,7 +248,7 @@ async def start_session(
             detail="Vehicle not found.",
         )
 
-    if await get_active_assignment_for_user(db, user.id):
+    if await get_active_assignment_for_user(db, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User already has an active vehicle session.",
@@ -226,7 +261,7 @@ async def start_session(
         )
 
     assignment = VehicleAssignment(
-        user_id=user.id,
+        user_id=current_user.id,
         vehicle_id=vehicle.id,
         status=AssignmentStatus.ACTIVE,
     )
@@ -237,8 +272,8 @@ async def start_session(
 
     return StartSessionResponseSchema(
         assignment_id=assignment.id,
-        user_id=user.id,
-        user_name=user.full_name,
+        user_id=current_user.id,
+        user_name=current_user.full_name,
         vehicle_id=vehicle.id,
         license_plate=vehicle.license_plate,
         started_at=assignment.started_at,
@@ -250,10 +285,10 @@ async def start_session(
 async def end_session(
     payload: EndSessionRequestSchema,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_driver),
 ) -> EndSessionResponseSchema:
-    user = await get_user_by_code_or_404(payload.code, db)
+    active_assignment = await get_active_assignment_for_user(db, current_user.id)
 
-    active_assignment = await get_active_assignment_for_user(db, user.id)
     if active_assignment is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -267,14 +302,15 @@ async def end_session(
     )
     report = report_result.scalar_one_or_none()
 
-    if not report:
+    if report is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Completează predarea înainte.",
         )
 
-    if not all(
-        [
+    if any(
+        value is None
+        for value in [
             report.mileage_end,
             report.dashboard_warnings_end,
             report.damage_notes_end,

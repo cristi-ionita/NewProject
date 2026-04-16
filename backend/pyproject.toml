@@ -19,6 +19,9 @@ alembic = "^1.14.0"
 pydantic = "^2.10.0"
 pydantic-settings = "^2.6.1"
 python-multipart = "^0.0.22"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+bcrypt = "4.0.1"
+python-jose = {extras = ["cryptography"], version = "^3.5.0"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.0"

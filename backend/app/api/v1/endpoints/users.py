@@ -1,12 +1,13 @@
-import hashlib
+from __future__ import annotations
+
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_current_admin
+from app.core.security import hash_pin
 from app.db.models.user import User
 from app.db.session import get_db
 from app.schemas.user import (
@@ -18,129 +19,146 @@ from app.schemas.user import (
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-def normalize_full_name(name: str) -> str:
+def normalize_name(name: str) -> str:
     return " ".join(word.capitalize() for word in name.strip().split())
-
-
-def normalize_role(role: str) -> str:
-    value = role.strip().lower()
-
-    if value not in {"employee", "mechanic"}:
-        raise HTTPException(400, "Rol invalid.")
-
-    return value
-
-
-def validate_shift_number(shift_number: str) -> str:
-    value = shift_number.strip()
-
-    if not value:
-        raise HTTPException(400, "Numărul de tură este obligatoriu.")
-
-    if not value.isdigit():
-        raise HTTPException(400, "Numărul de tură trebuie să conțină doar cifre.")
-
-    return value
 
 
 def validate_pin(pin: str) -> str:
     value = pin.strip()
 
     if not value.isdigit() or len(value) != 4:
-        raise HTTPException(400, "PIN-ul trebuie să fie format din 4 cifre.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="PIN invalid (4 cifre).",
+        )
 
     return value
 
 
-def hash_pin(pin: str) -> str:
-    return hashlib.sha256(pin.encode()).hexdigest()
+def validate_role(role: str) -> str:
+    value = role.strip().lower()
+
+    if value not in {"employee", "mechanic"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Rol invalid.",
+        )
+
+    return value
+
+
+def validate_shift(shift: str | None) -> str | None:
+    if not shift:
+        return None
+
+    value = shift.strip()
+
+    if not value.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tura trebuie să fie numerică.",
+        )
+
+    return value
 
 
 async def get_user_or_404(db: AsyncSession, user_id: int) -> User:
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user = (
+        await db.execute(select(User).where(User.id == user_id))
+    ).scalar_one_or_none()
 
-    if not user:
-        raise HTTPException(404, "Utilizatorul nu există.")
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
 
     return user
 
 
-async def ensure_unique_full_name(
+async def ensure_unique_name(
     db: AsyncSession,
-    full_name: str,
-    exclude_user_id: int | None = None,
+    name: str,
+    exclude_id: int | None = None,
 ) -> None:
-    query = select(User).where(func.lower(User.full_name) == full_name.lower())
+    query = select(User).where(func.lower(User.full_name) == name.lower())
 
-    if exclude_user_id:
-        query = query.where(User.id != exclude_user_id)
+    if exclude_id is not None:
+        query = query.where(User.id != exclude_id)
 
-    if (await db.execute(query)).scalar_one_or_none():
-        raise HTTPException(400, "Există deja un utilizator cu acest nume.")
+    existing = (await db.execute(query)).scalar_one_or_none()
+
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Există deja un utilizator cu acest nume.",
+        )
 
 
-async def ensure_shift_is_available(
+async def ensure_shift_free(
     db: AsyncSession,
-    shift_number: str,
-    exclude_user_id: int | None = None,
+    shift: str,
+    exclude_id: int | None = None,
 ) -> None:
     query = select(User).where(
-        User.shift_number == shift_number,
+        User.shift_number == shift,
         User.is_active.is_(True),
     )
 
-    if exclude_user_id:
-        query = query.where(User.id != exclude_user_id)
+    if exclude_id is not None:
+        query = query.where(User.id != exclude_id)
 
-    if (await db.execute(query)).scalar_one_or_none():
-        raise HTTPException(400, "Tura nu este liberă.")
+    existing = (await db.execute(query)).scalar_one_or_none()
 
-
-class ResetPinSchema(BaseModel):
-    new_pin: str = Field(..., min_length=4, max_length=4)
+    if existing is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tura este ocupată.",
+        )
 
 
 @router.get("", response_model=list[UserReadSchema])
 async def list_users(
-    active_only: bool = Query(default=False),
+    active_only: bool = Query(False),
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-):
+    _: User = Depends(get_current_admin),
+) -> list[UserReadSchema]:
     query = select(User)
 
     if active_only:
         query = query.where(User.is_active.is_(True))
 
     result = await db.execute(query.order_by(User.full_name.asc()))
-    return [UserReadSchema.model_validate(u) for u in result.scalars().all()]
+
+    return [UserReadSchema.model_validate(user) for user in result.scalars().all()]
 
 
-@router.post("", response_model=UserReadSchema, status_code=201)
+@router.post("", response_model=UserReadSchema, status_code=status.HTTP_201_CREATED)
 async def create_user(
     payload: UserCreateRequestSchema,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-):
-    full_name = normalize_full_name(payload.full_name)
-    role = normalize_role(getattr(payload, "role", "employee"))
+    _: User = Depends(get_current_admin),
+) -> UserReadSchema:
+    name = normalize_name(payload.full_name)
+    role = validate_role(payload.role)
     pin = validate_pin(payload.pin)
 
-    shift_number: str | None = None
-    if role != "mechanic":
-        shift_number = validate_shift_number(payload.shift_number or "")
-        await ensure_shift_is_available(db, shift_number)
+    await ensure_unique_name(db, name)
 
-    await ensure_unique_full_name(db, full_name)
+    shift = None
+    if role != "mechanic":
+        shift = validate_shift(payload.shift_number)
+        if shift:
+            await ensure_shift_free(db, shift)
 
     user = User(
-        full_name=full_name,
-        shift_number=shift_number,
+        full_name=name,
         unique_code=uuid.uuid4().hex[:10],
+        shift_number=shift,
         pin_hash=hash_pin(pin),
         password_hash="not-used",
-        is_active=True,
         role=role,
+        is_active=True,
     )
 
     db.add(user)
@@ -155,29 +173,29 @@ async def update_user(
     user_id: int,
     payload: UserUpdateRequestSchema,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-):
+    _: User = Depends(get_current_admin),
+) -> UserReadSchema:
     user = await get_user_or_404(db, user_id)
 
-    full_name = normalize_full_name(payload.full_name)
-    role = normalize_role(getattr(payload, "role", getattr(user, "role", "employee")))
+    name = normalize_name(payload.full_name)
+    role = validate_role(payload.role)
 
-    await ensure_unique_full_name(db, full_name, user_id)
+    await ensure_unique_name(db, name, user.id)
 
+    shift = None
     will_be_active = payload.is_active if payload.is_active is not None else user.is_active
 
-    shift_number: str | None = None
     if role != "mechanic":
-        shift_number = validate_shift_number(payload.shift_number or "")
-        if will_be_active:
-            await ensure_shift_is_available(db, shift_number, user_id)
+        shift = validate_shift(payload.shift_number)
+        if shift and will_be_active:
+            await ensure_shift_free(db, shift, user.id)
 
     if payload.pin:
         user.pin_hash = hash_pin(validate_pin(payload.pin))
 
-    user.full_name = full_name
+    user.full_name = name
     user.role = role
-    user.shift_number = shift_number
+    user.shift_number = shift
 
     if payload.is_active is not None:
         user.is_active = payload.is_active
@@ -189,32 +207,15 @@ async def update_user(
 
 
 @router.patch("/{user_id}/reset-pin", response_model=UserReadSchema)
-async def reset_user_pin(
+async def reset_pin(
     user_id: int,
-    payload: ResetPinSchema,
+    new_pin: str,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-):
+    _: User = Depends(get_current_admin),
+) -> UserReadSchema:
     user = await get_user_or_404(db, user_id)
 
-    pin = validate_pin(payload.new_pin)
-    user.pin_hash = hash_pin(pin)
-
-    await db.commit()
-    await db.refresh(user)
-
-    return UserReadSchema.model_validate(user)
-
-
-@router.patch("/{user_id}/deactivate", response_model=UserReadSchema)
-async def deactivate_user(
-    user_id: int,
-    db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-):
-    user = await get_user_or_404(db, user_id)
-
-    user.is_active = False
+    user.pin_hash = hash_pin(validate_pin(new_pin))
 
     await db.commit()
     await db.refresh(user)
@@ -226,15 +227,30 @@ async def deactivate_user(
 async def activate_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-):
+    _: User = Depends(get_current_admin),
+) -> UserReadSchema:
     user = await get_user_or_404(db, user_id)
 
-    if getattr(user, "role", "employee") != "mechanic":
-        shift_number = validate_shift_number(user.shift_number or "")
-        await ensure_shift_is_available(db, shift_number, user_id)
+    if user.role != "mechanic" and user.shift_number:
+        await ensure_shift_free(db, user.shift_number, user.id)
 
     user.is_active = True
+
+    await db.commit()
+    await db.refresh(user)
+
+    return UserReadSchema.model_validate(user)
+
+
+@router.patch("/{user_id}/deactivate", response_model=UserReadSchema)
+async def deactivate_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+) -> UserReadSchema:
+    user = await get_user_or_404(db, user_id)
+
+    user.is_active = False
 
     await db.commit()
     await db.refresh(user)

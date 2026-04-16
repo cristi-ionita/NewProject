@@ -9,62 +9,207 @@ export type MechanicSession = {
   user_id: number;
   full_name: string;
   unique_code: string;
-  role: string;
+  role: "mechanic";
 };
 
-export function saveAdminToken(token: string) {
-  localStorage.setItem("admin_token", token);
+const STORAGE_KEYS = {
+  adminToken: "admin_token",
+  userSession: "user_session",
+  mechanicSession: "mechanic_session",
+} as const;
+
+function isBrowser(): boolean {
+  return typeof window !== "undefined";
 }
 
-export function getAdminToken() {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("admin_token");
+function getStorage(): Storage | null {
+  if (!isBrowser()) {
+    return null;
+  }
+
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
-export function clearAdminToken() {
-  localStorage.removeItem("admin_token");
+function readStorage(key: string): string | null {
+  const storage = getStorage();
+  if (!storage) return null;
+
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 
-export function saveUserSession(session: UserSession) {
-  localStorage.setItem("user_session", JSON.stringify(session));
+function writeStorage(key: string, value: string): void {
+  const storage = getStorage();
+  if (!storage) return;
+
+  try {
+    storage.setItem(key, value);
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function removeStorage(key: string): void {
+  const storage = getStorage();
+  if (!storage) return;
+
+  try {
+    storage.removeItem(key);
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function parseStoredJson<T>(
+  key: string,
+  validator: (value: unknown) => value is T
+): T | null {
+  const raw = readStorage(key);
+
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+
+    if (!validator(parsed)) {
+      removeStorage(key);
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    removeStorage(key);
+    return null;
+  }
+}
+
+function isValidUserSession(value: unknown): value is UserSession {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const session = value as Partial<UserSession>;
+
+  return (
+    isFiniteNumber(session.user_id) &&
+    isNonEmptyString(session.full_name) &&
+    isNonEmptyString(session.unique_code) &&
+    (session.shift_number === null || typeof session.shift_number === "string")
+  );
+}
+
+function isValidMechanicSession(value: unknown): value is MechanicSession {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const session = value as Partial<MechanicSession>;
+
+  return (
+    isFiniteNumber(session.user_id) &&
+    isNonEmptyString(session.full_name) &&
+    isNonEmptyString(session.unique_code) &&
+    session.role === "mechanic"
+  );
+}
+
+function normalizeToken(token: string): string | null {
+  const normalized = token.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+export function saveAdminToken(token: string): void {
+  const normalized = normalizeToken(token);
+
+  if (!normalized) {
+    removeStorage(STORAGE_KEYS.adminToken);
+    return;
+  }
+
+  writeStorage(STORAGE_KEYS.adminToken, normalized);
+}
+
+export function getAdminToken(): string | null {
+  const raw = readStorage(STORAGE_KEYS.adminToken);
+  if (!raw) return null;
+
+  const normalized = normalizeToken(raw);
+
+  if (!normalized) {
+    removeStorage(STORAGE_KEYS.adminToken);
+    return null;
+  }
+
+  return normalized;
+}
+
+export function clearAdminToken(): void {
+  removeStorage(STORAGE_KEYS.adminToken);
+}
+
+export function saveUserSession(session: UserSession): void {
+  if (!isValidUserSession(session)) {
+    return;
+  }
+
+  writeStorage(STORAGE_KEYS.userSession, JSON.stringify(session));
 }
 
 export function getUserSession(): UserSession | null {
-  if (typeof window === "undefined") return null;
+  return parseStoredJson(STORAGE_KEYS.userSession, isValidUserSession);
+}
 
-  const raw = localStorage.getItem("user_session");
-  if (!raw) return null;
+export function clearUserSession(): void {
+  removeStorage(STORAGE_KEYS.userSession);
+}
 
-  try {
-    return JSON.parse(raw) as UserSession;
-  } catch {
-    localStorage.removeItem("user_session");
-    return null;
+export function saveMechanicSession(session: MechanicSession): void {
+  if (!isValidMechanicSession(session)) {
+    return;
   }
-}
 
-export function clearUserSession() {
-  localStorage.removeItem("user_session");
-}
-
-export function saveMechanicSession(session: MechanicSession) {
-  localStorage.setItem("mechanic_session", JSON.stringify(session));
+  writeStorage(STORAGE_KEYS.mechanicSession, JSON.stringify(session));
 }
 
 export function getMechanicSession(): MechanicSession | null {
-  if (typeof window === "undefined") return null;
-
-  const raw = localStorage.getItem("mechanic_session");
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as MechanicSession;
-  } catch {
-    localStorage.removeItem("mechanic_session");
-    return null;
-  }
+  return parseStoredJson(STORAGE_KEYS.mechanicSession, isValidMechanicSession);
 }
 
-export function clearMechanicSession() {
-  localStorage.removeItem("mechanic_session");
+export function clearMechanicSession(): void {
+  removeStorage(STORAGE_KEYS.mechanicSession);
+}
+
+export function clearAllSessions(): void {
+  clearAdminToken();
+  clearUserSession();
+  clearMechanicSession();
+}
+
+export function hasActiveAdminSession(): boolean {
+  return getAdminToken() !== null;
+}
+
+export function hasActiveUserSession(): boolean {
+  return getUserSession() !== null;
+}
+
+export function hasActiveMechanicSession(): boolean {
+  return getMechanicSession() !== null;
 }

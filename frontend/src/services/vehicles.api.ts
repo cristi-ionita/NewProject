@@ -1,6 +1,7 @@
 import { api } from "@/lib/axios";
 
 export type VehicleStatus = "active" | "inactive" | "in_service" | "sold";
+export type VehicleAvailability = "occupied" | "free";
 
 export type VehicleItem = {
   id: number;
@@ -21,14 +22,24 @@ export type CreateVehiclePayload = {
   vin?: string;
 };
 
+export type UpdateVehiclePayload = Partial<{
+  brand: string;
+  model: string;
+  license_plate: string;
+  year: number;
+  vin: string | null;
+  status: VehicleStatus;
+  current_mileage: number;
+}>;
+
 export type VehicleLiveStatusItem = {
   vehicle_id: number;
   brand: string;
   model: string;
   license_plate: string;
   year: number;
-  vehicle_status: string;
-  availability: "occupied" | "free";
+  vehicle_status: VehicleStatus;
+  availability: VehicleAvailability;
   assigned_to_user_id: number | null;
   assigned_to_name: string | null;
   assigned_to_shift_number: string | null;
@@ -38,41 +49,6 @@ export type VehicleLiveStatusItem = {
 export type VehicleLiveStatusResponse = {
   vehicles: VehicleLiveStatusItem[];
 };
-
-export async function listVehicles() {
-  const { data } = await api.get<VehicleItem[]>("/vehicles");
-  return data;
-}
-
-export async function createVehicle(payload: CreateVehiclePayload) {
-  const { data } = await api.post<VehicleItem>("/vehicles", payload);
-  return data;
-}
-
-export async function updateVehicle(
-  vehicleId: number,
-  payload: Partial<{
-    brand: string;
-    model: string;
-    license_plate: string;
-    year: number;
-    vin: string | null;
-    status: VehicleStatus;
-    current_mileage: number;
-  }>
-) {
-  const { data } = await api.put<VehicleItem>(`/vehicles/${vehicleId}`, payload);
-  return data;
-}
-
-export async function deleteVehicle(vehicleId: number) {
-  await api.delete(`/vehicles/${vehicleId}`);
-}
-
-export async function getVehicleLiveStatus() {
-  const { data } = await api.get<VehicleLiveStatusResponse>("/vehicles/live-status");
-  return data;
-}
 
 export type VehicleHistoryItem = {
   assignment_id: number;
@@ -99,7 +75,50 @@ export type VehicleHistoryResponse = {
   history: VehicleHistoryItem[];
 };
 
-export async function getVehicleHistory(vehicleId: number) {
-  const { data } = await api.get<VehicleHistoryResponse>(`/vehicles/${vehicleId}/history`);
+export async function listVehicles(): Promise<VehicleItem[]> {
+  const { data } = await api.get<VehicleItem[]>("/vehicles");
+
+  return data;
+}
+
+export async function createVehicle(
+  payload: CreateVehiclePayload
+): Promise<VehicleItem> {
+  const { data } = await api.post<VehicleItem>("/vehicles", payload);
+
+  return data;
+}
+
+export async function updateVehicle(
+  vehicleId: number,
+  payload: UpdateVehiclePayload
+): Promise<VehicleItem> {
+  const { data } = await api.put<VehicleItem>(
+    `/vehicles/${vehicleId}`,
+    payload
+  );
+
+  return data;
+}
+
+export async function deleteVehicle(vehicleId: number): Promise<void> {
+  await api.delete(`/vehicles/${vehicleId}`);
+}
+
+export async function getVehicleLiveStatus(): Promise<VehicleLiveStatusResponse> {
+  const { data } = await api.get<VehicleLiveStatusResponse>(
+    "/vehicles/live-status"
+  );
+
+  return data;
+}
+
+export async function getVehicleHistory(
+  vehicleId: number
+): Promise<VehicleHistoryResponse> {
+  const { data } = await api.get<VehicleHistoryResponse>(
+    `/vehicles/${vehicleId}/history`
+  );
+
   return data;
 }

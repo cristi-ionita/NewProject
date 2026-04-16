@@ -1,10 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import (
-    get_user_by_code_or_404,
-)
+from app.api.v1.dependencies import get_current_assignment
 from app.db.models.vehicle_assignment import VehicleAssignment
 from app.db.models.vehicle_handover_report import VehicleHandoverReport
 from app.db.session import get_db
@@ -27,51 +25,26 @@ from app.schemas.vehicle_session import (
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
-# =========================
-# HELPERS
-# =========================
-
-
-async def get_assignment_or_404(
-    db: AsyncSession,
-    assignment_id: int,
-) -> VehicleAssignment:
-    result = await db.execute(
-        select(VehicleAssignment).where(VehicleAssignment.id == assignment_id)
-    )
-    assignment = result.scalar_one_or_none()
-
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Session not found.")
-
-    return assignment
-
-
 async def get_handover_report(
     db: AsyncSession,
     assignment_id: int,
 ) -> VehicleHandoverReport | None:
-    result = await db.execute(
-        select(VehicleHandoverReport).where(VehicleHandoverReport.assignment_id == assignment_id)
-    )
-    return result.scalar_one_or_none()
-
-
-def ensure_session_belongs_to_user(assignment, user):
-    if assignment.user_id != user.id:
-        raise HTTPException(
-            status_code=403,
-            detail="Nu ai voie să accesezi această sesiune.",
+    return (
+        await db.execute(
+            select(VehicleHandoverReport).where(
+                VehicleHandoverReport.assignment_id == assignment_id
+            )
         )
+    ).scalar_one_or_none()
 
 
-def is_handover_start_completed(report):
+def is_handover_start_completed(report: VehicleHandoverReport) -> bool:
     return any(
         [
-            report.mileage_start,
-            report.dashboard_warnings_start,
-            report.damage_notes_start,
-            report.notes_start,
+            report.mileage_start is not None,
+            report.dashboard_warnings_start is not None,
+            report.damage_notes_start is not None,
+            report.notes_start is not None,
             report.has_documents,
             report.has_medkit,
             report.has_extinguisher,
@@ -81,50 +54,43 @@ def is_handover_start_completed(report):
     )
 
 
-def is_handover_end_completed(report):
+def is_handover_end_completed(report: VehicleHandoverReport) -> bool:
     return any(
         [
-            report.mileage_end,
-            report.dashboard_warnings_end,
-            report.damage_notes_end,
-            report.notes_end,
+            report.mileage_end is not None,
+            report.dashboard_warnings_end is not None,
+            report.damage_notes_end is not None,
+            report.notes_end is not None,
         ]
     )
 
 
-# =========================
-# ENDPOINTS
-# =========================
-
-
 @router.get("/{assignment_id}", response_model=VehicleSessionPageResponseSchema)
 async def get_session_page(
-    assignment_id: int,
-    user_code: str = Query(...),
+    assignment: VehicleAssignment = Depends(get_current_assignment),
     db: AsyncSession = Depends(get_db),
-):
-    user = await get_user_by_code_or_404(user_code, db)
-    assignment = await get_assignment_or_404(db, assignment_id)
+) -> VehicleSessionPageResponseSchema:
+    await db.refresh(assignment, ["user", "vehicle"])
 
-    ensure_session_belongs_to_user(assignment, user)
-
-    await db.refresh(assignment, attribute_names=["user", "vehicle"])
-
-    # previous assignment
-    previous_assignment_result = await db.execute(
-        select(VehicleAssignment)
-        .where(
-            VehicleAssignment.vehicle_id == assignment.vehicle_id,
-            VehicleAssignment.started_at < assignment.started_at,
+    previous_assignment = (
+        (
+            await db.execute(
+                select(VehicleAssignment)
+                .where(
+                    VehicleAssignment.vehicle_id == assignment.vehicle_id,
+                    VehicleAssignment.started_at < assignment.started_at,
+                )
+                .order_by(desc(VehicleAssignment.started_at))
+                .limit(1)
+            )
         )
-        .order_by(desc(VehicleAssignment.started_at))
-        .limit(1)
+        .scalars()
+        .first()
     )
-    previous_assignment = previous_assignment_result.scalar_one_or_none()
 
     previous_report = None
     if previous_assignment:
-        await db.refresh(previous_assignment, attribute_names=["user"])
+        await db.refresh(previous_assignment, ["user"])
         previous_report = PreviousHandoverReportSchema(
             assignment_id=previous_assignment.id,
             previous_driver_name=previous_assignment.user.full_name,
@@ -132,7 +98,7 @@ async def get_session_page(
             previous_session_ended_at=previous_assignment.ended_at,
         )
 
-    report = await get_handover_report(db, assignment_id)
+    report = await get_handover_report(db, assignment.id)
 
     return VehicleSessionPageResponseSchema(
         session=CurrentSessionSchema(
@@ -187,27 +153,28 @@ async def get_session_page(
 
 @router.post("/{assignment_id}/handover-start", response_model=HandoverStartResponseSchema)
 async def save_handover_start(
-    assignment_id: int,
     payload: HandoverStartRequestSchema,
+    assignment: VehicleAssignment = Depends(get_current_assignment),
     db: AsyncSession = Depends(get_db),
-):
-    user = await get_user_by_code_or_404(payload.user_code, db)
-    assignment = await get_assignment_or_404(db, assignment_id)
-
-    ensure_session_belongs_to_user(assignment, user)
-
-    report = await get_handover_report(db, assignment_id)
+) -> HandoverStartResponseSchema:
+    report = await get_handover_report(db, assignment.id)
 
     if report and is_handover_start_completed(report):
-        raise HTTPException(400, "Datele de preluare au fost deja salvate.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Preluare deja completată.",
+        )
 
-    await db.refresh(assignment, attribute_names=["vehicle"])
+    await db.refresh(assignment, ["vehicle"])
 
     if payload.mileage_start < assignment.vehicle.current_mileage:
-        raise HTTPException(400, "Kilometri invalizi.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kilometri invalizi.",
+        )
 
     if not report:
-        report = VehicleHandoverReport(assignment_id=assignment_id)
+        report = VehicleHandoverReport(assignment_id=assignment.id)
         db.add(report)
 
     report.mileage_start = payload.mileage_start
@@ -228,22 +195,23 @@ async def save_handover_start(
 
 @router.post("/{assignment_id}/handover-end", response_model=HandoverEndResponseSchema)
 async def save_handover_end(
-    assignment_id: int,
     payload: HandoverEndRequestSchema,
+    assignment: VehicleAssignment = Depends(get_current_assignment),
     db: AsyncSession = Depends(get_db),
-):
-    user = await get_user_by_code_or_404(payload.user_code, db)
-    assignment = await get_assignment_or_404(db, assignment_id)
+) -> HandoverEndResponseSchema:
+    report = await get_handover_report(db, assignment.id)
 
-    ensure_session_belongs_to_user(assignment, user)
-
-    report = await get_handover_report(db, assignment_id)
-
-    if not report or report.mileage_start is None:
-        raise HTTPException(400, "Lipsesc datele de preluare.")
+    if report is None or report.mileage_start is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Lipsesc datele de preluare.",
+        )
 
     if payload.mileage_end < report.mileage_start:
-        raise HTTPException(400, "Kilometri invalizi.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Kilometri invalizi.",
+        )
 
     report.mileage_end = payload.mileage_end
     report.dashboard_warnings_end = payload.dashboard_warnings_end

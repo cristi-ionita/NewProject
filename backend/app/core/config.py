@@ -18,8 +18,9 @@ class Settings(BaseSettings):
     DB_USER: str
     DB_PASSWORD: str
 
-    ADMIN_PASSWORD: str
     ADMIN_TOKEN_SECRET: str
+    ADMIN_TOKEN_ALGORITHM: str = "HS256"
+    ADMIN_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
 
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,

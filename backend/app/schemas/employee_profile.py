@@ -4,7 +4,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
 class EmployeeProfileBaseSchema(BaseSchema):
@@ -40,8 +43,6 @@ class EmployeeProfileUpdateSchema(BaseSchema):
 
 
 class EmployeeProfileReadSchema(EmployeeProfileBaseSchema):
-    model_config = ConfigDict(from_attributes=True, extra="forbid")
-
     id: int
     user_id: int
     created_at: datetime

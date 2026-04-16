@@ -1,10 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { getUserSession } from "@/lib/auth";
-import { extractErrorMessage } from "@/lib/error";
-import { getMyVehicle, MyVehicleResponse } from "@/services/my-vehicle.api";
-import { useI18n } from "@/lib/i18n/use-i18n";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CarFront,
@@ -15,27 +11,29 @@ import {
   Wrench,
 } from "lucide-react";
 
+import EmptyState from "@/components/ui/empty-state";
+import ErrorAlert from "@/components/ui/error-alert";
+import HeroStatCard from "@/components/ui/hero-stat-card";
+import LoadingCard from "@/components/ui/loading-card";
+import PageHero from "@/components/ui/page-hero";
+import SectionCard from "@/components/ui/section-card";
+
+import { getUserSession } from "@/lib/auth";
+import { extractErrorMessage } from "@/lib/error";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { getMyVehicle, type MyVehicleResponse } from "@/services/my-vehicle.api";
+
+type SupportedLocale = "ro" | "en" | "de";
+
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function cardClass() {
-  return "rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.06)]";
+function normalize(value?: string | null) {
+  return (value || "").trim().toLowerCase();
 }
 
-function tileClass() {
-  return "rounded-[18px] border border-slate-200 bg-slate-50/80 p-4";
-}
-
-function sectionLabelClass() {
-  return "text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500";
-}
-
-function displayValueClass() {
-  return "mt-2 text-sm font-medium text-slate-900";
-}
-
-function formatDate(value?: string | null, locale: "ro" | "en" | "de" = "ro") {
+function formatDate(value?: string | null, locale: SupportedLocale = "ro") {
   if (!value) return "—";
 
   const date = new Date(value);
@@ -51,13 +49,13 @@ function formatDate(value?: string | null, locale: "ro" | "en" | "de" = "ro") {
 }
 
 function getStatusBadgeClass(status?: string | null) {
-  const normalized = status?.toLowerCase?.() || "";
+  const normalized = normalize(status);
 
   if (normalized === "active" || normalized === "completed" || normalized === "resolved") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
   }
 
-  if (normalized === "in_progress" || normalized === "scheduled") {
+  if (normalized === "in_progress" || normalized === "scheduled" || normalized === "pending") {
     return "border-amber-200 bg-amber-50 text-amber-700";
   }
 
@@ -69,15 +67,16 @@ function getStatusBadgeClass(status?: string | null) {
 }
 
 export default function MyVehiclePage() {
-  const session = getUserSession();
   const { locale } = useI18n();
+  const safeLocale: SupportedLocale =
+    locale === "ro" || locale === "en" || locale === "de" ? locale : "en";
 
   const [data, setData] = useState<MyVehicleResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   function text(values: { ro: string; en: string; de: string }) {
-    return values[locale];
+    return values[safeLocale];
   }
 
   function yesNo(value?: boolean | null) {
@@ -87,7 +86,7 @@ export default function MyVehiclePage() {
   }
 
   function getStatusLabel(status?: string | null) {
-    const normalized = status?.toLowerCase?.() || "";
+    const normalized = normalize(status);
 
     if (normalized === "active") {
       return text({ ro: "Activ", en: "Active", de: "Aktiv" });
@@ -120,177 +119,138 @@ export default function MyVehiclePage() {
     return status || "—";
   }
 
-  useEffect(() => {
-    async function load() {
-      try {
-        if (!session?.unique_code) {
-          setError(
-            text({
-              ro: "Sesiune invalidă.",
-              en: "Invalid session.",
-              de: "Ungültige Sitzung.",
-            })
-          );
-          setLoading(false);
-          return;
-        }
+  const loadVehicle = useCallback(async () => {
+    const session = getUserSession();
 
-        const result = await getMyVehicle(session.unique_code);
-        setData(result);
-      } catch (err: unknown) {
+    try {
+      setLoading(true);
+      setError("");
+
+      if (!session?.unique_code) {
+        setData(null);
         setError(
-          extractErrorMessage(
-            err,
-            text({
-              ro: "Nu am putut încărca datele vehiculului",
-              en: "Could not load vehicle data",
-              de: "Fahrzeugdaten konnten nicht geladen werden",
-            })
-          )
+          text({
+            ro: "Sesiune invalidă.",
+            en: "Invalid session.",
+            de: "Ungültige Sitzung.",
+          })
         );
-      } finally {
-        setLoading(false);
+        return;
       }
-    }
 
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.unique_code, locale]);
+      const result = await getMyVehicle(session.unique_code);
+      setData(result);
+    } catch (err: unknown) {
+      setData(null);
+      setError(
+        extractErrorMessage(
+          err,
+          text({
+            ro: "Nu am putut încărca datele vehiculului.",
+            en: "Could not load vehicle data.",
+            de: "Fahrzeugdaten konnten nicht geladen werden.",
+          })
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [safeLocale]);
+
+  useEffect(() => {
+    void loadVehicle();
+  }, [loadVehicle]);
 
   const openIssuesCount = useMemo(() => data?.open_issues.length ?? 0, [data]);
-  const hasVehicle = !!data?.vehicle;
+  const hasVehicle = Boolean(data?.vehicle);
 
   if (loading) {
-    return (
-      <div className="rounded-[24px] border border-white/60 bg-white/80 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-slate-900" />
-          <p className="text-sm font-medium text-slate-600">
-            {text({
-              ro: "Se încarcă...",
-              en: "Loading...",
-              de: "Wird geladen...",
-            })}
-          </p>
-        </div>
-      </div>
-    );
+    return <LoadingCard />;
   }
 
-  if (error) {
-    return (
-      <div className="rounded-[24px] border border-red-200 bg-red-50 p-6 text-sm font-medium text-red-700">
-        {error}
-      </div>
-    );
+  if (error && !data) {
+    return <ErrorAlert message={error} />;
   }
 
   if (!data) {
     return (
-      <div className={cardClass()}>
-        <div className="text-sm text-slate-500">
-          {text({
-            ro: "Nu există date.",
-            en: "There is no data.",
-            de: "Es sind keine Daten vorhanden.",
-          })}
-        </div>
-      </div>
+      <EmptyState
+        title={text({
+          ro: "Nu există date",
+          en: "There is no data",
+          de: "Es sind keine Daten vorhanden",
+        })}
+      />
     );
   }
 
   return (
-    <div className="space-y-5 text-slate-900">
-      <section className="relative overflow-hidden rounded-[26px] border border-slate-200 bg-slate-950 p-4 sm:p-5 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.12),transparent_24%)]" />
-
-        <div className="relative">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2.5">
-              <div>
-                <h1 className="text-[30px] font-semibold tracking-tight text-white sm:text-[34px]">
-                  {text({
-                    ro: "Mașina mea",
-                    en: "My Vehicle",
-                    de: "Mein Fahrzeug",
-                  })}
-                </h1>
-                <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-300">
-                  {text({
-                    ro: "Vezi informațiile despre mașina ta, alocare, handover și problemele deschise.",
-                    en: "View your vehicle information, assignment, handover, and open issues.",
-                    de: "Sieh Informationen zu deinem Fahrzeug, der Zuweisung, Übergabe und offenen Problemen.",
-                  })}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid w-full max-w-xl grid-cols-1 gap-2.5 sm:grid-cols-4">
-              <HeroStatCard
-                icon={<UserRound className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Utilizator",
-                  en: "User",
-                  de: "Benutzer",
-                })}
-                value={data.user.full_name}
-              />
-              <HeroStatCard
-                icon={<CarFront className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Vehicul",
-                  en: "Vehicle",
-                  de: "Fahrzeug",
-                })}
-                value={hasVehicle ? data.vehicle!.license_plate : "—"}
-              />
-              <HeroStatCard
-                icon={<Gauge className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Kilometraj",
-                  en: "Mileage",
-                  de: "Kilometerstand",
-                })}
-                value={hasVehicle ? String(data.vehicle!.current_mileage ?? "—") : "—"}
-              />
-              <HeroStatCard
-                icon={<AlertTriangle className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Probleme deschise",
-                  en: "Open issues",
-                  de: "Offene Probleme",
-                })}
-                value={String(openIssuesCount)}
-              />
-            </div>
+    <div className="space-y-6">
+      <PageHero
+        icon={<CarFront className="h-7 w-7" />}
+        title={text({
+          ro: "Mașina mea",
+          en: "My Vehicle",
+          de: "Mein Fahrzeug",
+        })}
+        description={text({
+          ro: "Vezi informațiile despre mașina ta, alocare, handover și problemele deschise.",
+          en: "View your vehicle information, assignment, handover and open issues.",
+          de: "Sieh Informationen zu deinem Fahrzeug, der Zuweisung, Übergabe und offenen Problemen.",
+        })}
+        stats={
+          <div className="grid w-full gap-3 sm:grid-cols-4">
+            <HeroStatCard
+              icon={<UserRound className="h-4 w-4" />}
+              label={text({
+                ro: "Utilizator",
+                en: "User",
+                de: "Benutzer",
+              })}
+              value={data.user.full_name}
+            />
+            <HeroStatCard
+              icon={<CarFront className="h-4 w-4" />}
+              label={text({
+                ro: "Vehicul",
+                en: "Vehicle",
+                de: "Fahrzeug",
+              })}
+              value={hasVehicle ? data.vehicle?.license_plate || "—" : "—"}
+            />
+            <HeroStatCard
+              icon={<Gauge className="h-4 w-4" />}
+              label={text({
+                ro: "Kilometraj",
+                en: "Mileage",
+                de: "Kilometerstand",
+              })}
+              value={hasVehicle ? String(data.vehicle?.current_mileage ?? "—") : "—"}
+            />
+            <HeroStatCard
+              icon={<AlertTriangle className="h-4 w-4" />}
+              label={text({
+                ro: "Probleme deschise",
+                en: "Open issues",
+                de: "Offene Probleme",
+              })}
+              value={openIssuesCount}
+            />
           </div>
-        </div>
-      </section>
+        }
+      />
+
+      {error ? <ErrorAlert message={error} /> : null}
 
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className={cardClass()}>
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-              <UserRound className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                {text({
-                  ro: "Utilizator",
-                  en: "User",
-                  de: "Benutzer",
-                })}
-              </p>
-              <h2 className="text-[17px] font-semibold text-slate-950">
-                {text({
-                  ro: "Prezentare generală",
-                  en: "Overview",
-                  de: "Übersicht",
-                })}
-              </h2>
-            </div>
-          </div>
-
+        <SectionCard
+          title={text({
+            ro: "Prezentare generală",
+            en: "Overview",
+            de: "Übersicht",
+          })}
+          icon={<UserRound className="h-5 w-5" />}
+        >
           <div className="grid gap-3 md:grid-cols-3">
             <InfoTile
               label={text({ ro: "Nume", en: "Name", de: "Name" })}
@@ -305,41 +265,24 @@ export default function MyVehiclePage() {
               value={data.user.shift_number || "-"}
             />
           </div>
-        </div>
+        </SectionCard>
 
-        <div className={cardClass()}>
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-              <ShieldCheck className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                {text({
-                  ro: "Alocare",
-                  en: "Assignment",
-                  de: "Zuweisung",
-                })}
-              </p>
-              <h2 className="text-[17px] font-semibold text-slate-950">
-                {text({
-                  ro: "Starea curentă",
-                  en: "Current state",
-                  de: "Aktueller Status",
-                })}
-              </h2>
-            </div>
-          </div>
-
+        <SectionCard
+          title={text({
+            ro: "Starea curentă",
+            en: "Current state",
+            de: "Aktueller Status",
+          })}
+          icon={<ShieldCheck className="h-5 w-5" />}
+        >
           {!data.assignment ? (
-            <div className={tileClass()}>
-              <p className="text-sm text-slate-500">
-                {text({
-                  ro: "Nu există assignment activ.",
-                  en: "There is no active assignment.",
-                  de: "Es gibt keine aktive Zuweisung.",
-                })}
-              </p>
-            </div>
+            <EmptyState
+              title={text({
+                ro: "Nu există assignment activ",
+                en: "There is no active assignment",
+                de: "Es gibt keine aktive Zuweisung",
+              })}
+            />
           ) : (
             <div className="grid gap-3 md:grid-cols-3">
               <InfoTile
@@ -357,46 +300,32 @@ export default function MyVehiclePage() {
               />
               <InfoTile
                 label={text({ ro: "Pornit", en: "Started", de: "Gestartet" })}
-                value={formatDate(data.assignment.started_at, locale)}
+                value={formatDate(data.assignment.started_at, safeLocale)}
               />
             </div>
           )}
-        </div>
+        </SectionCard>
       </section>
 
       {!data.vehicle ? (
-        <section className={cardClass()}>
-          <div className={tileClass()}>
-            <p className="text-sm text-slate-500">
-              {text({
-                ro: "Nu ai o mașină atribuită în acest moment.",
-                en: "You do not have an assigned vehicle at the moment.",
-                de: "Du hast momentan kein zugewiesenes Fahrzeug.",
-              })}
-            </p>
-          </div>
-        </section>
+        <EmptyState
+          title={text({
+            ro: "Nu ai o mașină atribuită",
+            en: "You do not have an assigned vehicle",
+            de: "Du hast kein zugewiesenes Fahrzeug",
+          })}
+          description={text({
+            ro: "În acest moment nu există un vehicul asociat contului tău.",
+            en: "At the moment there is no vehicle assigned to your account.",
+            de: "Im Moment ist deinem Konto kein Fahrzeug zugewiesen.",
+          })}
+        />
       ) : (
         <>
-          <section className={cardClass()}>
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-                <CarFront className="h-4.5 w-4.5" />
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {text({
-                    ro: "Vehicul",
-                    en: "Vehicle",
-                    de: "Fahrzeug",
-                  })}
-                </p>
-                <h2 className="text-[17px] font-semibold text-slate-950">
-                  {data.vehicle.license_plate} · {data.vehicle.brand} {data.vehicle.model}
-                </h2>
-              </div>
-            </div>
-
+          <SectionCard
+            title={`${data.vehicle.license_plate} · ${data.vehicle.brand} ${data.vehicle.model}`}
+            icon={<CarFront className="h-5 w-5" />}
+          >
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <InfoTile
                 label={text({ ro: "Marcă", en: "Brand", de: "Marke" })}
@@ -429,32 +358,17 @@ export default function MyVehiclePage() {
                 value={String(data.vehicle.current_mileage ?? "-")}
               />
             </div>
-          </section>
+          </SectionCard>
 
           <section className="grid gap-4 xl:grid-cols-2">
-            <div className={cardClass()}>
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-                  <ClipboardList className="h-4.5 w-4.5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    {text({
-                      ro: "Preluare",
-                      en: "Handover",
-                      de: "Übergabe",
-                    })}
-                  </p>
-                  <h2 className="text-[17px] font-semibold text-slate-950">
-                    {text({
-                      ro: "Start",
-                      en: "Start",
-                      de: "Start",
-                    })}
-                  </h2>
-                </div>
-              </div>
-
+            <SectionCard
+              title={text({
+                ro: "Preluare",
+                en: "Handover start",
+                de: "Übergabestart",
+              })}
+              icon={<ClipboardList className="h-5 w-5" />}
+            >
               {data.handover_start ? (
                 <div className="grid gap-3 md:grid-cols-2">
                   <StatusTile
@@ -464,7 +378,7 @@ export default function MyVehiclePage() {
                       de: "Abgeschlossen",
                     })}
                     value={data.handover_start.is_completed ? "completed" : "pending"}
-                    displayValue={data.handover_start.is_completed ? yesNo(true) : yesNo(false)}
+                    displayValue={yesNo(data.handover_start.is_completed)}
                   />
                   <InfoTile
                     label={text({
@@ -502,41 +416,24 @@ export default function MyVehiclePage() {
                   </div>
                 </div>
               ) : (
-                <div className={tileClass()}>
-                  <p className="text-sm text-slate-500">
-                    {text({
-                      ro: "Nu există date de preluare.",
-                      en: "There is no handover start data.",
-                      de: "Es gibt keine Start-Übergabedaten.",
-                    })}
-                  </p>
-                </div>
+                <EmptyState
+                  title={text({
+                    ro: "Nu există date de preluare",
+                    en: "There is no handover start data",
+                    de: "Es gibt keine Start-Übergabedaten",
+                  })}
+                />
               )}
-            </div>
+            </SectionCard>
 
-            <div className={cardClass()}>
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-                  <ClipboardList className="h-4.5 w-4.5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    {text({
-                      ro: "Predare",
-                      en: "Handover",
-                      de: "Übergabe",
-                    })}
-                  </p>
-                  <h2 className="text-[17px] font-semibold text-slate-950">
-                    {text({
-                      ro: "Final",
-                      en: "End",
-                      de: "Ende",
-                    })}
-                  </h2>
-                </div>
-              </div>
-
+            <SectionCard
+              title={text({
+                ro: "Predare",
+                en: "Handover end",
+                de: "Übergabeende",
+              })}
+              icon={<ClipboardList className="h-5 w-5" />}
+            >
               {data.handover_end ? (
                 <div className="grid gap-3 md:grid-cols-2">
                   <StatusTile
@@ -546,7 +443,7 @@ export default function MyVehiclePage() {
                       de: "Abgeschlossen",
                     })}
                     value={data.handover_end.is_completed ? "completed" : "pending"}
-                    displayValue={data.handover_end.is_completed ? yesNo(true) : yesNo(false)}
+                    displayValue={yesNo(data.handover_end.is_completed)}
                   />
                   <InfoTile
                     label={text({
@@ -584,56 +481,37 @@ export default function MyVehiclePage() {
                   </div>
                 </div>
               ) : (
-                <div className={tileClass()}>
-                  <p className="text-sm text-slate-500">
-                    {text({
-                      ro: "Nu există date de predare.",
-                      en: "There is no handover end data.",
-                      de: "Es gibt keine End-Übergabedaten.",
-                    })}
-                  </p>
-                </div>
+                <EmptyState
+                  title={text({
+                    ro: "Nu există date de predare",
+                    en: "There is no handover end data",
+                    de: "Es gibt keine End-Übergabedaten",
+                  })}
+                />
               )}
-            </div>
+            </SectionCard>
           </section>
 
-          <section className={cardClass()}>
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-                <Wrench className="h-4.5 w-4.5" />
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {text({
-                    ro: "Probleme",
-                    en: "Issues",
-                    de: "Probleme",
-                  })}
-                </p>
-                <h2 className="text-[17px] font-semibold text-slate-950">
-                  {text({
-                    ro: "Probleme deschise",
-                    en: "Open issues",
-                    de: "Offene Probleme",
-                  })}
-                </h2>
-              </div>
-            </div>
-
+          <SectionCard
+            title={text({
+              ro: "Probleme deschise",
+              en: "Open issues",
+              de: "Offene Probleme",
+            })}
+            icon={<Wrench className="h-5 w-5" />}
+          >
             {data.open_issues.length === 0 ? (
-              <div className={tileClass()}>
-                <p className="text-sm text-slate-500">
-                  {text({
-                    ro: "Nu există issue-uri deschise.",
-                    en: "There are no open issues.",
-                    de: "Es gibt keine offenen Probleme.",
-                  })}
-                </p>
-              </div>
+              <EmptyState
+                title={text({
+                  ro: "Nu există issue-uri deschise",
+                  en: "There are no open issues",
+                  de: "Es gibt keine offenen Probleme",
+                })}
+              />
             ) : (
               <div className="grid gap-4 xl:grid-cols-2">
                 {data.open_issues.map((issue, index) => (
-                  <div
+                  <article
                     key={issue.id}
                     className="rounded-[18px] border border-slate-200 bg-slate-50/80 p-4"
                   >
@@ -677,7 +555,7 @@ export default function MyVehiclePage() {
                           en: "Created",
                           de: "Erstellt",
                         })}
-                        value={formatDate(issue.created_at, locale)}
+                        value={formatDate(issue.created_at, safeLocale)}
                       />
                       <InfoTile
                         label={text({
@@ -722,33 +600,13 @@ export default function MyVehiclePage() {
                         />
                       </div>
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
             )}
-          </section>
+          </SectionCard>
         </>
       )}
-    </div>
-  );
-}
-
-function HeroStatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[18px] border border-white/10 bg-white/5 p-3 backdrop-blur-sm">
-      <div className="flex items-center gap-2 text-slate-300">
-        {icon}
-        <span className="text-[10px] uppercase tracking-[0.14em]">{label}</span>
-      </div>
-      <p className="mt-2.5 line-clamp-2 text-sm font-semibold text-white">{value}</p>
     </div>
   );
 }
@@ -761,9 +619,11 @@ function InfoTile({
   value: string;
 }) {
   return (
-    <div className={tileClass()}>
-      <p className={sectionLabelClass()}>{label}</p>
-      <p className={displayValueClass()}>{value}</p>
+    <div className="rounded-[18px] border border-slate-200 bg-white p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 break-words text-sm font-medium text-slate-900">{value}</p>
     </div>
   );
 }
@@ -778,8 +638,10 @@ function StatusTile({
   displayValue?: string;
 }) {
   return (
-    <div className={tileClass()}>
-      <p className={sectionLabelClass()}>{label}</p>
+    <div className="rounded-[18px] border border-slate-200 bg-white p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
       <div className="mt-2">
         <span
           className={cn(

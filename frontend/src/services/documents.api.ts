@@ -1,12 +1,21 @@
 import { api } from "@/lib/axios";
 
+export type DocumentType =
+  | "contract"
+  | "payslip"
+  | "driver_license"
+  | "personal"
+  | "company";
+
+export type DocumentStatus = "valid" | "expired" | "pending";
+
 export type DocumentItem = {
   id: number;
   user_id: number;
   uploaded_by: number | null;
-  type: string;
+  type: DocumentType;
   category: string;
-  status: string;
+  status: DocumentStatus;
   file_name: string;
   mime_type: string;
   expires_at: string | null;
@@ -14,12 +23,31 @@ export type DocumentItem = {
   updated_at: string;
 };
 
-export async function getUserDocuments(userId: number) {
-  const { data } = await api.get<DocumentItem[]>(`/documents/admin/user/${userId}`);
+// ========================
+// 🔐 User header helper
+// ========================
+function buildUserHeaders(userCode: string) {
+  return {
+    "X-User-Code": userCode,
+  };
+}
+
+// ========================
+// 📄 Admin endpoints
+// ========================
+
+export async function getUserDocuments(userId: number): Promise<DocumentItem[]> {
+  const { data } = await api.get<DocumentItem[]>(
+    `/documents/admin/user/${userId}`
+  );
+
   return data;
 }
 
-export async function adminUploadDocument(userId: number, formData: FormData) {
+export async function adminUploadDocument(
+  userId: number,
+  formData: FormData
+): Promise<DocumentItem> {
   const { data } = await api.post<DocumentItem>(
     `/documents/admin/upload/${userId}`,
     formData,
@@ -29,47 +57,73 @@ export async function adminUploadDocument(userId: number, formData: FormData) {
       },
     }
   );
+
   return data;
 }
 
-export async function adminDeleteDocument(documentId: number) {
+export async function adminDeleteDocument(documentId: number): Promise<void> {
   await api.delete(`/documents/admin/${documentId}`);
 }
 
-export async function adminDownloadDocumentFile(documentId: number) {
+export async function adminDownloadDocumentFile(
+  documentId: number
+): Promise<Blob> {
   const response = await api.get(`/documents/admin/${documentId}/download`, {
     responseType: "blob",
   });
 
-  return response;
+  return response.data;
 }
 
-export async function getMyDocuments(code: string) {
-  const { data } = await api.get<DocumentItem[]>(`/documents/me/${code}`);
+// ========================
+// 👤 User endpoints
+// ========================
+
+export async function getMyDocuments(
+  userCode: string
+): Promise<DocumentItem[]> {
+  const { data } = await api.get<DocumentItem[]>(`/documents/me`, {
+    headers: buildUserHeaders(userCode),
+  });
+
   return data;
 }
 
-export async function uploadMyDocument(code: string, formData: FormData) {
+export async function uploadMyDocument(
+  userCode: string,
+  formData: FormData
+): Promise<DocumentItem> {
   const { data } = await api.post<DocumentItem>(
-    `/documents/upload/${code}`,
+    `/documents/upload`,
     formData,
     {
       headers: {
+        ...buildUserHeaders(userCode),
         "Content-Type": "multipart/form-data",
       },
     }
   );
+
   return data;
 }
 
-export async function deleteMyDocument(documentId: number, code: string) {
-  await api.delete(`/documents/me/${documentId}/${code}`);
+export async function deleteMyDocument(
+  documentId: number,
+  userCode: string
+): Promise<void> {
+  await api.delete(`/documents/me/${documentId}`, {
+    headers: buildUserHeaders(userCode),
+  });
 }
 
-export async function myDownloadDocumentFile(documentId: number, code: string) {
-  const response = await api.get(`/documents/${documentId}/download/${code}`, {
+export async function myDownloadDocumentFile(
+  documentId: number,
+  userCode: string
+): Promise<Blob> {
+  const response = await api.get(`/documents/${documentId}/download`, {
+    headers: buildUserHeaders(userCode),
     responseType: "blob",
   });
 
-  return response;
+  return response.data;
 }

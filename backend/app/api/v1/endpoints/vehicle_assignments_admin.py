@@ -16,17 +16,18 @@ from app.schemas.vehicle_assignment_admin import (
     VehicleAssignmentReadSchema,
 )
 
-router = APIRouter(prefix="/admin-assignments", tags=["admin-assignments"])
-
-
-# =========================
-# HELPERS
-# =========================
+router = APIRouter(
+    prefix="/admin-assignments",
+    tags=["admin-assignments"],
+    dependencies=[Depends(get_current_admin)],
+)
 
 
 def parse_assignment_status(value: str) -> AssignmentStatus:
+    normalized = value.strip().upper()
+
     try:
-        return AssignmentStatus[value.strip().upper()]
+        return AssignmentStatus[normalized]
     except KeyError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -35,21 +36,27 @@ def parse_assignment_status(value: str) -> AssignmentStatus:
 
 
 async def get_user_or_404(db: AsyncSession, user_id: int) -> User:
-    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
 
     if user is None:
-        raise HTTPException(404, "User not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utilizatorul nu există.",
+        )
 
     return user
 
 
 async def get_vehicle_or_404(db: AsyncSession, vehicle_id: int) -> Vehicle:
-    vehicle = (
-        await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
-    ).scalar_one_or_none()
+    result = await db.execute(select(Vehicle).where(Vehicle.id == vehicle_id))
+    vehicle = result.scalar_one_or_none()
 
     if vehicle is None:
-        raise HTTPException(404, "Vehicle not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Mașina nu există.",
+        )
 
     return vehicle
 
@@ -58,12 +65,16 @@ async def get_assignment_or_404(
     db: AsyncSession,
     assignment_id: int,
 ) -> VehicleAssignment:
-    assignment = (
-        await db.execute(select(VehicleAssignment).where(VehicleAssignment.id == assignment_id))
-    ).scalar_one_or_none()
+    result = await db.execute(
+        select(VehicleAssignment).where(VehicleAssignment.id == assignment_id)
+    )
+    assignment = result.scalar_one_or_none()
 
     if assignment is None:
-        raise HTTPException(404, "Assignment not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Atribuirea nu există.",
+        )
 
     return assignment
 
@@ -72,28 +83,26 @@ async def get_active_assignment_for_user(
     db: AsyncSession,
     user_id: int,
 ) -> VehicleAssignment | None:
-    return (
-        await db.execute(
-            select(VehicleAssignment).where(
-                VehicleAssignment.user_id == user_id,
-                VehicleAssignment.status == AssignmentStatus.ACTIVE,
-            )
+    result = await db.execute(
+        select(VehicleAssignment).where(
+            VehicleAssignment.user_id == user_id,
+            VehicleAssignment.status == AssignmentStatus.ACTIVE,
         )
-    ).scalar_one_or_none()
+    )
+    return result.scalar_one_or_none()
 
 
 async def get_active_assignment_for_vehicle(
     db: AsyncSession,
     vehicle_id: int,
 ) -> VehicleAssignment | None:
-    return (
-        await db.execute(
-            select(VehicleAssignment).where(
-                VehicleAssignment.vehicle_id == vehicle_id,
-                VehicleAssignment.status == AssignmentStatus.ACTIVE,
-            )
+    result = await db.execute(
+        select(VehicleAssignment).where(
+            VehicleAssignment.vehicle_id == vehicle_id,
+            VehicleAssignment.status == AssignmentStatus.ACTIVE,
         )
-    ).scalar_one_or_none()
+    )
+    return result.scalar_one_or_none()
 
 
 def build_assignment_read(
@@ -115,11 +124,6 @@ def build_assignment_read(
     )
 
 
-# =========================
-# ENDPOINTS
-# =========================
-
-
 @router.post(
     "",
     response_model=VehicleAssignmentReadSchema,
@@ -128,26 +132,25 @@ def build_assignment_read(
 async def create_assignment(
     payload: VehicleAssignmentCreateRequestSchema,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
 ) -> VehicleAssignmentReadSchema:
     user = await get_user_or_404(db, payload.user_id)
     vehicle = await get_vehicle_or_404(db, payload.vehicle_id)
 
     if not user.is_active:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Nu poți atribui o mașină unui utilizator inactiv.",
         )
 
     if await get_active_assignment_for_user(db, user.id):
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Utilizatorul are deja o mașină atribuită.",
         )
 
     if await get_active_assignment_for_vehicle(db, vehicle.id):
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Mașina este deja atribuită altui utilizator.",
         )
 
@@ -170,7 +173,6 @@ async def list_assignments(
     user_id: int | None = Query(default=None),
     vehicle_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
 ) -> VehicleAssignmentListResponseSchema:
     query = (
         select(VehicleAssignment, User, Vehicle)
@@ -179,7 +181,9 @@ async def list_assignments(
     )
 
     if status_filter:
-        query = query.where(VehicleAssignment.status == parse_assignment_status(status_filter))
+        query = query.where(
+            VehicleAssignment.status == parse_assignment_status(status_filter)
+        )
 
     if user_id is not None:
         query = query.where(VehicleAssignment.user_id == user_id)
@@ -188,11 +192,12 @@ async def list_assignments(
         query = query.where(VehicleAssignment.vehicle_id == vehicle_id)
 
     result = await db.execute(query.order_by(desc(VehicleAssignment.started_at)))
+    rows = result.all()
 
     return VehicleAssignmentListResponseSchema(
         assignments=[
             build_assignment_read(assignment, user, vehicle)
-            for assignment, user, vehicle in result.all()
+            for assignment, user, vehicle in rows
         ]
     )
 
@@ -204,14 +209,13 @@ async def list_assignments(
 async def close_assignment(
     assignment_id: int,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
 ) -> VehicleAssignmentCloseResponseSchema:
     assignment = await get_assignment_or_404(db, assignment_id)
 
     if assignment.status != AssignmentStatus.ACTIVE:
         raise HTTPException(
-            status_code=400,
-            detail="Assignment-ul este deja închis.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Atribuirea este deja închisă.",
         )
 
     assignment.status = AssignmentStatus.CLOSED
@@ -235,14 +239,13 @@ async def close_assignment(
 async def delete_closed_assignment(
     assignment_id: int,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
 ) -> Response:
     assignment = await get_assignment_or_404(db, assignment_id)
 
     if assignment.status == AssignmentStatus.ACTIVE:
         raise HTTPException(
-            status_code=400,
-            detail="Nu poți șterge un assignment activ. Închide-l mai întâi.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nu poți șterge o atribuire activă. Închide-o mai întâi.",
         )
 
     await db.delete(assignment)

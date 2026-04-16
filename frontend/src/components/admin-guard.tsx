@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+
 import { getAdminToken } from "@/lib/auth";
 
 export default function AdminGuard({
@@ -10,25 +11,20 @@ export default function AdminGuard({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [status, setStatus] = useState<"checking" | "allowed">("checking");
+  const token = getAdminToken();
 
   useEffect(() => {
-    const id = window.requestAnimationFrame(() => {
-      const token = getAdminToken();
+    if (!token) {
+      router.replace("/login");
+    }
+  }, [token, router]);
 
-      if (!token) {
-        router.replace("/admin/login");
-        return;
-      }
-
-      setStatus("allowed");
-    });
-
-    return () => window.cancelAnimationFrame(id);
-  }, [router]);
-
-  if (status === "checking") {
-    return <div className="p-6">Se verifică sesiunea...</div>;
+  if (!token) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-sm text-slate-500">Se verifică sesiunea...</p>
+      </div>
+    );
   }
 
   return <>{children}</>;

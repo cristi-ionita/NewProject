@@ -6,7 +6,10 @@ from app.db.models.document import DocumentCategory, DocumentStatus, DocumentTyp
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
 class DocumentBaseSchema(BaseSchema):
@@ -28,8 +31,6 @@ class DocumentUpdateSchema(BaseSchema):
 
 
 class DocumentReadSchema(DocumentBaseSchema):
-    model_config = ConfigDict(from_attributes=True, extra="forbid")
-
     id: int
     user_id: int
     uploaded_by: int | None = None

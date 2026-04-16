@@ -1,11 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { getUserSession } from "@/lib/auth";
-import { extractErrorMessage } from "@/lib/error";
-import { getActiveSession } from "@/services/auth.api";
-import { createMyIssue, listMyIssues, IssueItem } from "@/services/issues.api";
-import { useI18n } from "@/lib/i18n/use-i18n";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   CarFront,
@@ -14,35 +9,29 @@ import {
   Wrench,
 } from "lucide-react";
 
+import EmptyState from "@/components/ui/empty-state";
+import ErrorAlert from "@/components/ui/error-alert";
+import HeroStatCard from "@/components/ui/hero-stat-card";
+import LoadingCard from "@/components/ui/loading-card";
+import PageHero from "@/components/ui/page-hero";
+import SectionCard from "@/components/ui/section-card";
+
+import { getUserSession } from "@/lib/auth";
+import { extractErrorMessage } from "@/lib/error";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import { createMyIssue, listMyIssues, type IssueItem } from "@/services/issues.api";
+
+type SupportedLocale = "ro" | "en" | "de";
+
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function cardClass() {
-  return "rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.06)]";
+function normalize(value?: string | null) {
+  return (value || "").trim().toLowerCase();
 }
 
-function tileClass() {
-  return "rounded-[18px] border border-slate-200 bg-slate-50/80 p-4";
-}
-
-function sectionLabelClass() {
-  return "text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500";
-}
-
-function inputClass() {
-  return "w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200";
-}
-
-function textareaClass() {
-  return "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200";
-}
-
-function buttonPrimaryClass() {
-  return "inline-flex items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60";
-}
-
-function formatDate(value?: string | null, locale: "ro" | "en" | "de" = "ro") {
+function formatDate(value?: string | null, locale: SupportedLocale = "ro") {
   if (!value) return "—";
 
   const date = new Date(value);
@@ -58,7 +47,7 @@ function formatDate(value?: string | null, locale: "ro" | "en" | "de" = "ro") {
 }
 
 function getStatusBadgeClass(status?: string | null) {
-  const normalized = status?.toLowerCase?.() || "";
+  const normalized = normalize(status);
 
   if (normalized === "resolved") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
@@ -76,13 +65,11 @@ function getStatusBadgeClass(status?: string | null) {
 }
 
 export default function EmployeeIssuesPage() {
-  const session = getUserSession();
   const { locale } = useI18n();
+  const safeLocale: SupportedLocale =
+    locale === "ro" || locale === "en" || locale === "de" ? locale : "en";
 
   const [issues, setIssues] = useState<IssueItem[]>([]);
-  const [assignmentId, setAssignmentId] = useState<number | null>(null);
-  const [hasActiveSession, setHasActiveSession] = useState(false);
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -95,7 +82,7 @@ export default function EmployeeIssuesPage() {
   const [otherProblems, setOtherProblems] = useState("");
 
   function text(values: { ro: string; en: string; de: string }) {
-    return values[locale];
+    return values[safeLocale];
   }
 
   function yesNo(value: boolean) {
@@ -105,7 +92,7 @@ export default function EmployeeIssuesPage() {
   }
 
   function getStatusLabel(status: string) {
-    const normalized = status.toLowerCase();
+    const normalized = normalize(status);
 
     if (normalized === "resolved") {
       return text({ ro: "Rezolvat", en: "Resolved", de: "Gelöst" });
@@ -122,9 +109,24 @@ export default function EmployeeIssuesPage() {
     return text({ ro: "Deschis", en: "Open", de: "Offen" });
   }
 
-  async function loadData() {
+  const resetForm = useCallback(() => {
+    setNeedServiceInKm("");
+    setNeedBrakes(false);
+    setNeedTires(false);
+    setNeedOil(false);
+    setDashboardChecks("");
+    setOtherProblems("");
+  }, []);
+
+  const loadData = useCallback(async () => {
+    const session = getUserSession();
+
     try {
+      setLoading(true);
+      setError("");
+
       if (!session?.unique_code) {
+        setIssues([]);
         setError(
           text({
             ro: "Sesiune user invalidă.",
@@ -132,50 +134,78 @@ export default function EmployeeIssuesPage() {
             de: "Ungültige Benutzersitzung.",
           })
         );
-        setLoading(false);
         return;
       }
 
-      setError("");
-
-      const [issuesRes, activeRes] = await Promise.all([
-        listMyIssues(session.unique_code),
-        getActiveSession(session.unique_code),
-      ]);
-
+      const issuesRes = await listMyIssues(session.unique_code);
       setIssues(issuesRes.issues);
-      setHasActiveSession(!!activeRes.has_active_session);
-      setAssignmentId(activeRes.assignment_id ?? null);
     } catch (err: unknown) {
+      setIssues([]);
       setError(
         extractErrorMessage(
           err,
           text({
-            ro: "Nu am putut încărca issue-urile",
-            en: "Could not load issues",
-            de: "Probleme konnten nicht geladen werden",
+            ro: "Nu am putut încărca issue-urile.",
+            en: "Could not load issues.",
+            de: "Probleme konnten nicht geladen werden.",
           })
         )
       );
     } finally {
       setLoading(false);
     }
-  }
+  }, [safeLocale]);
 
   useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.unique_code, locale]);
+    void loadData();
+  }, [loadData]);
 
-  async function handleCreateIssue(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleCreateIssue(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-    if (!session?.unique_code || !assignmentId) {
+    const session = getUserSession();
+
+    if (!session?.unique_code) {
       setError(
         text({
-          ro: "Ai nevoie de sesiune activă pentru a raporta o problemă.",
-          en: "You need an active session to report an issue.",
-          de: "Du brauchst eine aktive Sitzung, um ein Problem zu melden.",
+          ro: "Sesiune user invalidă.",
+          en: "Invalid user session.",
+          de: "Ungültige Benutzersitzung.",
+        })
+      );
+      return;
+    }
+
+    const parsedServiceKm =
+      needServiceInKm.trim() === "" ? undefined : Number(needServiceInKm);
+
+    if (
+      parsedServiceKm !== undefined &&
+      (!Number.isFinite(parsedServiceKm) || parsedServiceKm < 0)
+    ) {
+      setError(
+        text({
+          ro: "Valoarea pentru service în km trebuie să fie un număr valid.",
+          en: "Service in km must be a valid number.",
+          de: "Service in km muss eine gültige Zahl sein.",
+        })
+      );
+      return;
+    }
+
+    if (
+      parsedServiceKm === undefined &&
+      !needBrakes &&
+      !needTires &&
+      !needOil &&
+      !dashboardChecks.trim() &&
+      !otherProblems.trim()
+    ) {
+      setError(
+        text({
+          ro: "Completează cel puțin o problemă.",
+          en: "Fill in at least one issue.",
+          de: "Fülle mindestens ein Problem aus.",
         })
       );
       return;
@@ -185,33 +215,25 @@ export default function EmployeeIssuesPage() {
       setSaving(true);
       setError("");
 
-      await createMyIssue({
-        user_code: session.unique_code,
-        assignment_id: assignmentId,
-        need_service_in_km: needServiceInKm ? Number(needServiceInKm) : undefined,
+      await createMyIssue(session.unique_code, {
+        need_service_in_km: parsedServiceKm,
         need_brakes: needBrakes,
         need_tires: needTires,
         need_oil: needOil,
-        dashboard_checks: dashboardChecks || undefined,
-        other_problems: otherProblems || undefined,
+        dashboard_checks: dashboardChecks.trim() || undefined,
+        other_problems: otherProblems.trim() || undefined,
       });
 
-      setNeedServiceInKm("");
-      setNeedBrakes(false);
-      setNeedTires(false);
-      setNeedOil(false);
-      setDashboardChecks("");
-      setOtherProblems("");
-
+      resetForm();
       await loadData();
     } catch (err: unknown) {
       setError(
         extractErrorMessage(
           err,
           text({
-            ro: "Nu am putut crea issue-ul",
-            en: "Could not create issue",
-            de: "Problem konnte nicht erstellt werden",
+            ro: "Nu am putut crea issue-ul.",
+            en: "Could not create issue.",
+            de: "Problem konnte nicht erstellt werden.",
           })
         )
       );
@@ -221,286 +243,212 @@ export default function EmployeeIssuesPage() {
   }
 
   const openIssuesCount = useMemo(
-    () => issues.filter((issue) => issue.status !== "resolved").length,
+    () => issues.filter((issue) => normalize(issue.status) !== "resolved").length,
     [issues]
   );
 
   const resolvedIssuesCount = useMemo(
-    () => issues.filter((issue) => issue.status === "resolved").length,
+    () => issues.filter((issue) => normalize(issue.status) === "resolved").length,
     [issues]
   );
 
   if (loading) {
-    return (
-      <div className="rounded-[24px] border border-white/60 bg-white/80 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-slate-900" />
-          <p className="text-sm font-medium text-slate-600">
-            {text({
-              ro: "Se încarcă...",
-              en: "Loading...",
-              de: "Wird geladen...",
-            })}
-          </p>
-        </div>
-      </div>
-    );
+    return <LoadingCard />;
+  }
+
+  if (error && !issues.length) {
+    return <ErrorAlert message={error} />;
   }
 
   return (
-    <div className="space-y-5 text-slate-900">
-      <section className="relative overflow-hidden rounded-[26px] border border-slate-200 bg-slate-950 p-4 sm:p-5 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.12),transparent_24%)]" />
-
-        <div className="relative">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2.5">
-              <div>
-                <h1 className="text-[30px] font-semibold tracking-tight text-white sm:text-[34px]">
-                  {text({
-                    ro: "Problemele mele",
-                    en: "My Issues",
-                    de: "Meine Probleme",
-                  })}
-                </h1>
-                <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-300">
-                  {text({
-                    ro: "Raportează rapid problemele observate și urmărește statusul lor.",
-                    en: "Quickly report observed problems and track their status.",
-                    de: "Melde beobachtete Probleme schnell und verfolge ihren Status.",
-                  })}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid w-full max-w-xl grid-cols-1 gap-2.5 sm:grid-cols-3">
-              <HeroStatCard
-                icon={<ClipboardList className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Total",
-                  en: "Total",
-                  de: "Gesamt",
-                })}
-                value={String(issues.length)}
-              />
-              <HeroStatCard
-                icon={<AlertTriangle className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Deschise",
-                  en: "Open",
-                  de: "Offen",
-                })}
-                value={String(openIssuesCount)}
-              />
-              <HeroStatCard
-                icon={<Wrench className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Rezolvate",
-                  en: "Resolved",
-                  de: "Gelöst",
-                })}
-                value={String(resolvedIssuesCount)}
-              />
-            </div>
+    <div className="space-y-6">
+      <PageHero
+        icon={<ClipboardList className="h-7 w-7" />}
+        title={text({
+          ro: "Problemele mele",
+          en: "My Issues",
+          de: "Meine Probleme",
+        })}
+        description={text({
+          ro: "Raportează rapid problemele observate și urmărește statusul lor.",
+          en: "Quickly report observed problems and track their status.",
+          de: "Melde beobachtete Probleme schnell und verfolge ihren Status.",
+        })}
+        stats={
+          <div className="grid w-full gap-3 sm:grid-cols-3">
+            <HeroStatCard
+              icon={<ClipboardList className="h-4 w-4" />}
+              label={text({
+                ro: "Total",
+                en: "Total",
+                de: "Gesamt",
+              })}
+              value={issues.length}
+            />
+            <HeroStatCard
+              icon={<AlertTriangle className="h-4 w-4" />}
+              label={text({
+                ro: "Deschise",
+                en: "Open",
+                de: "Offen",
+              })}
+              value={openIssuesCount}
+            />
+            <HeroStatCard
+              icon={<Wrench className="h-4 w-4" />}
+              label={text({
+                ro: "Rezolvate",
+                en: "Resolved",
+                de: "Gelöst",
+              })}
+              value={resolvedIssuesCount}
+            />
           </div>
-        </div>
-      </section>
+        }
+      />
 
-      {error ? (
-        <div className="rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 shadow-sm">
-          {error}
-        </div>
-      ) : null}
+      {error ? <ErrorAlert message={error} /> : null}
 
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className={cardClass()}>
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-              <Settings2 className="h-4.5 w-4.5" />
-            </div>
+        <SectionCard
+          title={text({
+            ro: "Raportează o problemă",
+            en: "Report an issue",
+            de: "Problem melden",
+          })}
+          icon={<Settings2 className="h-5 w-5" />}
+        >
+          <form onSubmit={handleCreateIssue} className="space-y-4">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              <label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 {text({
-                  ro: "Raportare",
-                  en: "Reporting",
-                  de: "Meldung",
+                  ro: "Service în km",
+                  en: "Service in km",
+                  de: "Service in km",
                 })}
-              </p>
-              <h2 className="text-[17px] font-semibold text-slate-950">
-                {text({
-                  ro: "Raportează o problemă",
-                  en: "Report an issue",
-                  de: "Problem melden",
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={needServiceInKm}
+                onChange={(event) => setNeedServiceInKm(event.target.value)}
+                placeholder={text({
+                  ro: "Ex: 1500",
+                  en: "Ex: 1500",
+                  de: "Z. B.: 1500",
                 })}
-              </h2>
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+              />
             </div>
-          </div>
 
-          {!hasActiveSession ? (
-            <div className={tileClass()}>
-              <p className="text-sm text-slate-500">
-                {text({
-                  ro: "Nu ai sesiune activă. Nu poți raporta probleme fără o sesiune activă.",
-                  en: "You do not have an active session. You cannot report issues without one.",
-                  de: "Du hast keine aktive Sitzung. Ohne aktive Sitzung kannst du keine Probleme melden.",
+            <div className="grid gap-3 md:grid-cols-3">
+              <CheckboxCard
+                checked={needBrakes}
+                onChange={setNeedBrakes}
+                label={text({
+                  ro: "Necesită frâne",
+                  en: "Need brakes",
+                  de: "Bremsen nötig",
                 })}
-              </p>
+              />
+              <CheckboxCard
+                checked={needTires}
+                onChange={setNeedTires}
+                label={text({
+                  ro: "Necesită anvelope",
+                  en: "Need tires",
+                  de: "Reifen nötig",
+                })}
+              />
+              <CheckboxCard
+                checked={needOil}
+                onChange={setNeedOil}
+                label={text({
+                  ro: "Necesită ulei",
+                  en: "Need oil",
+                  de: "Öl nötig",
+                })}
+              />
             </div>
-          ) : (
-            <form onSubmit={handleCreateIssue} className="space-y-4">
-              <div>
-                <label className={sectionLabelClass()}>
-                  {text({
-                    ro: "Service în km",
-                    en: "Service in km",
-                    de: "Service in km",
-                  })}
-                </label>
-                <input
-                  type="number"
-                  placeholder={text({
-                    ro: "Ex: 1500",
-                    en: "Ex: 1500",
-                    de: "Z. B.: 1500",
-                  })}
-                  value={needServiceInKm}
-                  onChange={(e) => setNeedServiceInKm(e.target.value)}
-                  className={cn("mt-2", inputClass())}
-                />
-              </div>
 
-              <div className="grid gap-3 md:grid-cols-3">
-                <CheckboxCard
-                  checked={needBrakes}
-                  onChange={setNeedBrakes}
-                  label={text({
-                    ro: "Necesită frâne",
-                    en: "Need brakes",
-                    de: "Bremsen nötig",
-                  })}
-                />
-                <CheckboxCard
-                  checked={needTires}
-                  onChange={setNeedTires}
-                  label={text({
-                    ro: "Necesită anvelope",
-                    en: "Need tires",
-                    de: "Reifen nötig",
-                  })}
-                />
-                <CheckboxCard
-                  checked={needOil}
-                  onChange={setNeedOil}
-                  label={text({
-                    ro: "Necesită ulei",
-                    en: "Need oil",
-                    de: "Öl nötig",
-                  })}
-                />
-              </div>
-
-              <div>
-                <label className={sectionLabelClass()}>
-                  {text({
-                    ro: "Verificări bord",
-                    en: "Dashboard checks",
-                    de: "Dashboard-Prüfungen",
-                  })}
-                </label>
-                <textarea
-                  placeholder={text({
-                    ro: "Descrie avertizările sau verificările de pe bord",
-                    en: "Describe dashboard warnings or checks",
-                    de: "Beschreibe Warnungen oder Prüfungen am Armaturenbrett",
-                  })}
-                  value={dashboardChecks}
-                  onChange={(e) => setDashboardChecks(e.target.value)}
-                  className={cn("mt-2 min-h-[110px]", textareaClass())}
-                />
-              </div>
-
-              <div>
-                <label className={sectionLabelClass()}>
-                  {text({
-                    ro: "Alte probleme",
-                    en: "Other problems",
-                    de: "Andere Probleme",
-                  })}
-                </label>
-                <textarea
-                  placeholder={text({
-                    ro: "Adaugă orice altă observație relevantă",
-                    en: "Add any other relevant observation",
-                    de: "Füge weitere relevante Beobachtungen hinzu",
-                  })}
-                  value={otherProblems}
-                  onChange={(e) => setOtherProblems(e.target.value)}
-                  className={cn("mt-2 min-h-[120px]", textareaClass())}
-                />
-              </div>
-
-              <div className="flex justify-end">
-                <button type="submit" disabled={saving} className={buttonPrimaryClass()}>
-                  {saving
-                    ? text({
-                        ro: "Se salvează...",
-                        en: "Saving...",
-                        de: "Wird gespeichert...",
-                      })
-                    : text({
-                        ro: "Raportează problema",
-                        en: "Report issue",
-                        de: "Problem melden",
-                      })}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-
-        <div className={cardClass()}>
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-              <ClipboardList className="h-4.5 w-4.5" />
-            </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              <label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 {text({
-                  ro: "Rezumat",
-                  en: "Overview",
-                  de: "Übersicht",
+                  ro: "Verificări bord",
+                  en: "Dashboard checks",
+                  de: "Dashboard-Prüfungen",
                 })}
-              </p>
-              <h2 className="text-[17px] font-semibold text-slate-950">
-                {text({
-                  ro: "Informații rapide",
-                  en: "Quick details",
-                  de: "Schnellinfos",
+              </label>
+              <textarea
+                value={dashboardChecks}
+                onChange={(event) => setDashboardChecks(event.target.value)}
+                placeholder={text({
+                  ro: "Descrie avertizările sau verificările de pe bord",
+                  en: "Describe dashboard warnings or checks",
+                  de: "Beschreibe Warnungen oder Prüfungen am Armaturenbrett",
                 })}
-              </h2>
+                className="mt-2 min-h-[110px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+              />
             </div>
-          </div>
 
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                {text({
+                  ro: "Alte probleme",
+                  en: "Other problems",
+                  de: "Andere Probleme",
+                })}
+              </label>
+              <textarea
+                value={otherProblems}
+                onChange={(event) => setOtherProblems(event.target.value)}
+                placeholder={text({
+                  ro: "Adaugă orice altă observație relevantă",
+                  en: "Add any other relevant observation",
+                  de: "Füge weitere relevante Beobachtungen hinzu",
+                })}
+                className="mt-2 min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving
+                  ? text({
+                      ro: "Se salvează...",
+                      en: "Saving...",
+                      de: "Wird gespeichert...",
+                    })
+                  : text({
+                      ro: "Raportează problema",
+                      en: "Report issue",
+                      de: "Problem melden",
+                    })}
+              </button>
+            </div>
+          </form>
+        </SectionCard>
+
+        <SectionCard
+          title={text({
+            ro: "Informații rapide",
+            en: "Quick details",
+            de: "Schnellinfos",
+          })}
+          icon={<ClipboardList className="h-5 w-5" />}
+        >
           <div className="space-y-2.5">
             <QuickRow
               label={text({
-                ro: "Sesiune activă",
-                en: "Active session",
-                de: "Aktive Sitzung",
+                ro: "Probleme totale",
+                en: "Total issues",
+                de: "Probleme gesamt",
               })}
-              value={
-                hasActiveSession
-                  ? text({ ro: "Da", en: "Yes", de: "Ja" })
-                  : text({ ro: "Nu", en: "No", de: "Nein" })
-              }
-            />
-            <QuickRow
-              label={text({
-                ro: "Assignment ID",
-                en: "Assignment ID",
-                de: "Zuweisungs-ID",
-              })}
-              value={assignmentId ? String(assignmentId) : "—"}
+              value={String(issues.length)}
             />
             <QuickRow
               label={text({
@@ -510,47 +458,43 @@ export default function EmployeeIssuesPage() {
               })}
               value={String(openIssuesCount)}
             />
+            <QuickRow
+              label={text({
+                ro: "Probleme rezolvate",
+                en: "Resolved issues",
+                de: "Gelöste Probleme",
+              })}
+              value={String(resolvedIssuesCount)}
+            />
           </div>
-        </div>
+        </SectionCard>
       </section>
 
-      <section className={cardClass()}>
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-            <CarFront className="h-4.5 w-4.5" />
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              {text({
-                ro: "Istoric",
-                en: "History",
-                de: "Verlauf",
-              })}
-            </p>
-            <h2 className="text-[17px] font-semibold text-slate-950">
-              {text({
-                ro: "Problemele mele raportate",
-                en: "My reported issues",
-                de: "Meine gemeldeten Probleme",
-              })}
-            </h2>
-          </div>
-        </div>
-
+      <SectionCard
+        title={text({
+          ro: "Problemele mele raportate",
+          en: "My reported issues",
+          de: "Meine gemeldeten Probleme",
+        })}
+        icon={<CarFront className="h-5 w-5" />}
+      >
         {issues.length === 0 ? (
-          <div className={tileClass()}>
-            <p className="text-sm text-slate-500">
-              {text({
-                ro: "Nu există issue-uri raportate.",
-                en: "There are no reported issues.",
-                de: "Es gibt keine gemeldeten Probleme.",
-              })}
-            </p>
-          </div>
+          <EmptyState
+            title={text({
+              ro: "Nu există issue-uri raportate",
+              en: "There are no reported issues",
+              de: "Es gibt keine gemeldeten Probleme",
+            })}
+            description={text({
+              ro: "Problemele raportate de tine vor apărea aici.",
+              en: "The issues reported by you will appear here.",
+              de: "Die von dir gemeldeten Probleme erscheinen hier.",
+            })}
+          />
         ) : (
           <div className="grid gap-4 xl:grid-cols-2">
             {issues.map((issue, index) => (
-              <div
+              <article
                 key={issue.id}
                 className="rounded-[18px] border border-slate-200 bg-slate-50/80 p-4"
               >
@@ -559,8 +503,12 @@ export default function EmployeeIssuesPage() {
                     <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-950 text-white">
                       <span className="text-xs font-semibold">{index + 1}</span>
                     </div>
+
                     <span className="text-sm font-semibold text-slate-900">
-                      {issue.vehicle_license_plate} - {issue.vehicle_brand} {issue.vehicle_model}
+                      {issue.vehicle_license_plate || "—"}
+                      {issue.vehicle_brand || issue.vehicle_model
+                        ? ` - ${issue.vehicle_brand || ""} ${issue.vehicle_model || ""}`.trim()
+                        : ""}
                     </span>
                   </div>
 
@@ -581,7 +529,7 @@ export default function EmployeeIssuesPage() {
                       en: "Service in km",
                       de: "Service in km",
                     })}
-                    value={String(issue.need_service_in_km ?? "-")}
+                    value={issue.need_service_in_km != null ? String(issue.need_service_in_km) : "-"}
                   />
                   <InfoTile
                     label={text({
@@ -589,7 +537,7 @@ export default function EmployeeIssuesPage() {
                       en: "Created",
                       de: "Erstellt",
                     })}
-                    value={formatDate(issue.created_at, locale)}
+                    value={formatDate(issue.created_at, safeLocale)}
                   />
                   <InfoTile
                     label={text({
@@ -597,7 +545,7 @@ export default function EmployeeIssuesPage() {
                       en: "Brakes",
                       de: "Bremsen",
                     })}
-                    value={yesNo(issue.need_brakes)}
+                    value={yesNo(Boolean(issue.need_brakes))}
                   />
                   <InfoTile
                     label={text({
@@ -605,7 +553,7 @@ export default function EmployeeIssuesPage() {
                       en: "Tires",
                       de: "Reifen",
                     })}
-                    value={yesNo(issue.need_tires)}
+                    value={yesNo(Boolean(issue.need_tires))}
                   />
                   <InfoTile
                     label={text({
@@ -613,7 +561,7 @@ export default function EmployeeIssuesPage() {
                       en: "Oil",
                       de: "Öl",
                     })}
-                    value={yesNo(issue.need_oil)}
+                    value={yesNo(Boolean(issue.need_oil))}
                   />
                   <InfoTile
                     label={text({
@@ -634,31 +582,11 @@ export default function EmployeeIssuesPage() {
                     />
                   </div>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         )}
-      </section>
-    </div>
-  );
-}
-
-function HeroStatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[18px] border border-white/10 bg-white/5 p-3 backdrop-blur-sm">
-      <div className="flex items-center gap-2 text-slate-300">
-        {icon}
-        <span className="text-[10px] uppercase tracking-[0.14em]">{label}</span>
-      </div>
-      <p className="mt-2.5 line-clamp-2 text-sm font-semibold text-white">{value}</p>
+      </SectionCard>
     </div>
   );
 }
@@ -677,7 +605,7 @@ function CheckboxCard({
       <input
         type="checkbox"
         checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
+        onChange={(event) => onChange(event.target.checked)}
         className="h-4 w-4 rounded border-slate-300"
       />
       <span className="text-sm font-medium text-slate-900">{label}</span>
@@ -708,9 +636,11 @@ function InfoTile({
   value: string;
 }) {
   return (
-    <div className={tileClass()}>
-      <p className={sectionLabelClass()}>{label}</p>
-      <p className="mt-2 text-sm font-medium text-slate-900">{value}</p>
+    <div className="rounded-[18px] border border-slate-200 bg-white p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <p className="mt-2 break-words text-sm font-medium text-slate-900">{value}</p>
     </div>
   );
 }

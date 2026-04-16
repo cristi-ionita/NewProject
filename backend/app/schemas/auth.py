@@ -4,7 +4,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
 class LoginRequestSchema(BaseSchema):
@@ -56,16 +59,7 @@ class ActiveSessionResponseSchema(BaseSchema):
 
 
 class StartSessionRequestSchema(BaseSchema):
-    code: str = Field(..., min_length=1, max_length=50)
     license_plate: str = Field(..., min_length=1, max_length=20)
-
-    @field_validator("code", mode="before")
-    @classmethod
-    def validate_code(cls, value: str) -> str:
-        cleaned = value.strip()
-        if not cleaned:
-            raise ValueError("User code is required.")
-        return cleaned
 
     @field_validator("license_plate", mode="before")
     @classmethod
@@ -87,15 +81,7 @@ class StartSessionResponseSchema(BaseSchema):
 
 
 class EndSessionRequestSchema(BaseSchema):
-    code: str = Field(..., min_length=1, max_length=50)
-
-    @field_validator("code", mode="before")
-    @classmethod
-    def validate_code(cls, value: str) -> str:
-        cleaned = value.strip()
-        if not cleaned:
-            raise ValueError("User code is required.")
-        return cleaned
+    pass
 
 
 class EndSessionResponseSchema(BaseSchema):

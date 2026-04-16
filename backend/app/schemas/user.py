@@ -2,11 +2,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class ORMBaseSchema(BaseSchema):
-    model_config = ConfigDict(from_attributes=True, extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
 class UserCreateRequestSchema(BaseSchema):
@@ -105,7 +104,7 @@ class UserUpdateRequestSchema(BaseSchema):
         return self
 
 
-class UserReadSchema(ORMBaseSchema):
+class UserReadSchema(BaseSchema):
     id: int
     full_name: str
     shift_number: str | None = None

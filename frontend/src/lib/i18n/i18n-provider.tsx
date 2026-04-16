@@ -3,83 +3,93 @@
 import {
   createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+
 import {
-  defaultLocale,
   getTranslation,
   locales,
   type Locale,
-  type TranslationKey,
   type TranslationNamespace,
 } from "./dictionaries";
 
 type I18nContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
-  t: <N extends TranslationNamespace>(
-    namespace: N,
-    key: TranslationKey<N>
-  ) => string;
+  t: (namespace: TranslationNamespace, key: string) => string;
 };
 
 export const I18nContext = createContext<I18nContextValue | null>(null);
 
-const STORAGE_KEY = "app-locale";
-
-function isLocale(value: string | null): value is Locale {
-  return !!value && locales.includes(value as Locale);
+function isLocale(value: string): value is Locale {
+  return locales.includes(value as Locale);
 }
 
-type Props = {
-  children: ReactNode;
-};
-
-function getInitialLocale(): Locale {
+function readInitialLocale(): Locale {
   if (typeof window === "undefined") {
-    return defaultLocale;
+    return "ro";
   }
 
-  const savedLocale = window.localStorage.getItem(STORAGE_KEY);
-
-  if (isLocale(savedLocale)) {
-    return savedLocale;
+  try {
+    const stored = window.localStorage.getItem("lang")?.trim().toLowerCase();
+    if (stored && isLocale(stored)) {
+      return stored;
+    }
+  } catch {
+    // ignore storage errors
   }
 
-  return defaultLocale;
+  const browserLocale = window.navigator.language?.split("-")[0]?.toLowerCase();
+  if (browserLocale && isLocale(browserLocale)) {
+    return browserLocale;
+  }
+
+  return "ro";
 }
 
-export function I18nProvider({ children }: Props) {
-  const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [locale, setLocaleState] = useState<Locale>(readInitialLocale);
 
   useEffect(() => {
     document.documentElement.lang = locale;
+
+    try {
+      window.localStorage.setItem("lang", locale);
+    } catch {
+      // ignore storage errors
+    }
   }, [locale]);
 
   const setLocale = useCallback((nextLocale: Locale) => {
-    setLocaleState(nextLocale);
-    window.localStorage.setItem(STORAGE_KEY, nextLocale);
-    document.documentElement.lang = nextLocale;
-  }, []);
+    if (!isLocale(nextLocale)) {
+      return;
+    }
 
-  const t = useCallback(
-    <N extends TranslationNamespace>(namespace: N, key: TranslationKey<N>) => {
-      return getTranslation(locale, String(namespace), String(key));
-    },
-    [locale]
-  );
+    setLocaleState(nextLocale);
+  }, []);
 
   const value = useMemo<I18nContextValue>(
     () => ({
       locale,
       setLocale,
-      t,
+      t: (namespace, key) => getTranslation(locale, namespace, key as never),
     }),
-    [locale, setLocale, t]
+    [locale, setLocale]
   );
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useI18nContext(): I18nContextValue {
+  const context = useContext(I18nContext);
+
+  if (!context) {
+    throw new Error("useI18nContext must be used within I18nProvider");
+  }
+
+  return context;
 }

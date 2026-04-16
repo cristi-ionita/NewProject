@@ -1,14 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { getUserSession } from "@/lib/auth";
-import { extractErrorMessage } from "@/lib/error";
-import {
-  createLeaveRequest,
-  getMyLeaveRequests,
-  type LeaveRequestItem,
-} from "@/services/leave.api";
-import { useI18n } from "@/lib/i18n/use-i18n";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   CheckCircle2,
@@ -17,36 +9,45 @@ import {
   XCircle,
 } from "lucide-react";
 
+import EmptyState from "@/components/ui/empty-state";
+import ErrorAlert from "@/components/ui/error-alert";
+import HeroStatCard from "@/components/ui/hero-stat-card";
+import LoadingCard from "@/components/ui/loading-card";
+import PageHero from "@/components/ui/page-hero";
+import SectionCard from "@/components/ui/section-card";
+
+import { getUserSession } from "@/lib/auth";
+import { extractErrorMessage } from "@/lib/error";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import {
+  createLeaveRequest,
+  getMyLeaveRequests,
+  type LeaveRequestItem,
+} from "@/services/leave.api";
+
+type SupportedLocale = "ro" | "en" | "de";
+
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function cardClass() {
-  return "rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.06)]";
+function normalize(value?: string | null) {
+  return (value || "").trim().toLowerCase();
 }
 
-function tileClass() {
-  return "rounded-[18px] border border-slate-200 bg-slate-50/80 p-4";
-}
+function formatDate(value: string, locale: SupportedLocale = "ro") {
+  const date = new Date(value);
 
-function inputClass() {
-  return "w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-slate-200";
-}
+  if (Number.isNaN(date.getTime())) return value;
 
-function textareaClass() {
-  return "w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-slate-200";
-}
-
-function labelClass() {
-  return "text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500";
-}
-
-function buttonPrimaryClass() {
-  return "inline-flex items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60";
+  return new Intl.DateTimeFormat(
+    locale === "ro" ? "ro-RO" : locale === "de" ? "de-DE" : "en-GB",
+    { dateStyle: "medium" }
+  ).format(date);
 }
 
 function statusBadgeClass(status: string) {
-  const normalized = status.toLowerCase();
+  const normalized = normalize(status);
 
   if (normalized === "approved") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
@@ -59,19 +60,10 @@ function statusBadgeClass(status: string) {
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
-function formatDate(value: string, locale: "ro" | "en" | "de" = "ro") {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat(
-    locale === "ro" ? "ro-RO" : locale === "de" ? "de-DE" : "en-GB",
-    { dateStyle: "medium" }
-  ).format(date);
-}
-
 export default function EmployeeLeavePage() {
   const { locale } = useI18n();
+  const safeLocale: SupportedLocale =
+    locale === "ro" || locale === "en" || locale === "de" ? locale : "en";
 
   const [requests, setRequests] = useState<LeaveRequestItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,11 +76,11 @@ export default function EmployeeLeavePage() {
   const [reason, setReason] = useState("");
 
   function text(values: { ro: string; en: string; de: string }) {
-    return values[locale];
+    return values[safeLocale];
   }
 
   function getStatusLabel(status: string) {
-    const normalized = status.toLowerCase();
+    const normalized = normalize(status);
 
     if (normalized === "approved") {
       return text({ ro: "Aprobat", en: "Approved", de: "Genehmigt" });
@@ -101,11 +93,21 @@ export default function EmployeeLeavePage() {
     return text({ ro: "În așteptare", en: "Pending", de: "Ausstehend" });
   }
 
-  async function loadLeaves() {
+  const resetForm = useCallback(() => {
+    setStartDate("");
+    setEndDate("");
+    setReason("");
+  }, []);
+
+  const loadLeaves = useCallback(async () => {
+    const session = getUserSession();
+
     try {
-      const session = getUserSession();
+      setLoading(true);
+      setError("");
 
       if (!session?.unique_code) {
+        setRequests([]);
         setError(
           text({
             ro: "Sesiune user invalidă.",
@@ -113,14 +115,13 @@ export default function EmployeeLeavePage() {
             de: "Ungültige Benutzersitzung.",
           })
         );
-        setLoading(false);
         return;
       }
 
-      setError("");
       const data = await getMyLeaveRequests(session.unique_code);
       setRequests(data.requests);
     } catch (err: unknown) {
+      setRequests([]);
       setError(
         extractErrorMessage(
           err,
@@ -134,44 +135,62 @@ export default function EmployeeLeavePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [safeLocale]);
 
   useEffect(() => {
-    loadLeaves();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale]);
+    void loadLeaves();
+  }, [loadLeaves]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const session = getUserSession();
+
+    if (!session?.unique_code) {
+      setError(
+        text({
+          ro: "Sesiune user invalidă.",
+          en: "Invalid user session.",
+          de: "Ungültige Benutzersitzung.",
+        })
+      );
+      return;
+    }
+
+    if (!startDate || !endDate) {
+      setError(
+        text({
+          ro: "Completează perioada concediului.",
+          en: "Please fill in the leave period.",
+          de: "Bitte fülle den Urlaubszeitraum aus.",
+        })
+      );
+      return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+      setError(
+        text({
+          ro: "Data de început nu poate fi după data de sfârșit.",
+          en: "Start date cannot be after end date.",
+          de: "Das Startdatum kann nicht nach dem Enddatum liegen.",
+        })
+      );
+      return;
+    }
 
     try {
-      const session = getUserSession();
-
-      if (!session?.unique_code) {
-        setError(
-          text({
-            ro: "Sesiune user invalidă.",
-            en: "Invalid user session.",
-            de: "Ungültige Benutzersitzung.",
-          })
-        );
-        return;
-      }
-
       setSaving(true);
       setError("");
       setSuccess("");
 
-      await createLeaveRequest({
-        user_code: session.unique_code,
+      await createLeaveRequest(session.unique_code, {
         start_date: startDate,
         end_date: endDate,
         reason: reason.trim() || null,
       });
 
-      setStartDate("");
-      setEndDate("");
-      setReason("");
+      resetForm();
       setSuccess(
         text({
           ro: "Cererea de concediu a fost trimisă.",
@@ -179,6 +198,7 @@ export default function EmployeeLeavePage() {
           de: "Urlaubsantrag wurde gesendet.",
         })
       );
+
       await loadLeaves();
     } catch (err: unknown) {
       setError(
@@ -197,101 +217,76 @@ export default function EmployeeLeavePage() {
   }
 
   const pendingCount = useMemo(
-    () => requests.filter((item) => item.status === "pending").length,
+    () => requests.filter((item) => normalize(item.status) === "pending").length,
     [requests]
   );
 
   const approvedCount = useMemo(
-    () => requests.filter((item) => item.status === "approved").length,
+    () => requests.filter((item) => normalize(item.status) === "approved").length,
     [requests]
   );
 
   const rejectedCount = useMemo(
-    () => requests.filter((item) => item.status === "rejected").length,
+    () => requests.filter((item) => normalize(item.status) === "rejected").length,
     [requests]
   );
 
   if (loading) {
-    return (
-      <div className="rounded-[24px] border border-white/60 bg-white/80 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-slate-900" />
-          <p className="text-sm font-medium text-slate-600">
-            {text({
-              ro: "Se încarcă...",
-              en: "Loading...",
-              de: "Wird geladen...",
-            })}
-          </p>
-        </div>
-      </div>
-    );
+    return <LoadingCard />;
+  }
+
+  if (error && !requests.length) {
+    return <ErrorAlert message={error} />;
   }
 
   return (
-    <div className="space-y-5 text-slate-900">
-      <section className="relative overflow-hidden rounded-[26px] border border-slate-200 bg-slate-950 p-4 sm:p-5 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.12),transparent_24%)]" />
-
-        <div className="relative">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2.5">
-              <div>
-                <h1 className="text-[30px] font-semibold tracking-tight text-white sm:text-[34px]">
-                  {text({
-                    ro: "Concediul meu",
-                    en: "My Leave",
-                    de: "Mein Urlaub",
-                  })}
-                </h1>
-                <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-300">
-                  {text({
-                    ro: "Trimite o cerere de concediu și vezi istoricul solicitărilor tale.",
-                    en: "Send a leave request and view your request history.",
-                    de: "Sende einen Urlaubsantrag und sieh deinen Antragsverlauf.",
-                  })}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid w-full max-w-xl grid-cols-1 gap-2.5 sm:grid-cols-3">
-              <HeroStatCard
-                icon={<ClipboardList className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "În așteptare",
-                  en: "Pending",
-                  de: "Ausstehend",
-                })}
-                value={String(pendingCount)}
-              />
-              <HeroStatCard
-                icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Aprobate",
-                  en: "Approved",
-                  de: "Genehmigt",
-                })}
-                value={String(approvedCount)}
-              />
-              <HeroStatCard
-                icon={<XCircle className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Respinse",
-                  en: "Rejected",
-                  de: "Abgelehnt",
-                })}
-                value={String(rejectedCount)}
-              />
-            </div>
+    <div className="space-y-6">
+      <PageHero
+        icon={<CalendarDays className="h-7 w-7" />}
+        title={text({
+          ro: "Concediul meu",
+          en: "My Leave",
+          de: "Mein Urlaub",
+        })}
+        description={text({
+          ro: "Trimite o cerere de concediu și vezi istoricul solicitărilor tale.",
+          en: "Send a leave request and view your request history.",
+          de: "Sende einen Urlaubsantrag und sieh deinen Antragsverlauf.",
+        })}
+        stats={
+          <div className="grid w-full gap-3 sm:grid-cols-3">
+            <HeroStatCard
+              icon={<ClipboardList className="h-4 w-4" />}
+              label={text({
+                ro: "În așteptare",
+                en: "Pending",
+                de: "Ausstehend",
+              })}
+              value={pendingCount}
+            />
+            <HeroStatCard
+              icon={<CheckCircle2 className="h-4 w-4" />}
+              label={text({
+                ro: "Aprobate",
+                en: "Approved",
+                de: "Genehmigt",
+              })}
+              value={approvedCount}
+            />
+            <HeroStatCard
+              icon={<XCircle className="h-4 w-4" />}
+              label={text({
+                ro: "Respinse",
+                en: "Rejected",
+                de: "Abgelehnt",
+              })}
+              value={rejectedCount}
+            />
           </div>
-        </div>
-      </section>
+        }
+      />
 
-      {error ? (
-        <div className="rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 shadow-sm">
-          {error}
-        </div>
-      ) : null}
+      {error ? <ErrorAlert message={error} /> : null}
 
       {success ? (
         <div className="rounded-[20px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 shadow-sm">
@@ -300,32 +295,17 @@ export default function EmployeeLeavePage() {
       ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className={cardClass()}>
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-              <Send className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                {text({
-                  ro: "Cerere nouă",
-                  en: "New request",
-                  de: "Neuer Antrag",
-                })}
-              </p>
-              <h2 className="text-[17px] font-semibold text-slate-950">
-                {text({
-                  ro: "Request Leave",
-                  en: "Request Leave",
-                  de: "Urlaub beantragen",
-                })}
-              </h2>
-            </div>
-          </div>
-
+        <SectionCard
+          title={text({
+            ro: "Cerere nouă",
+            en: "New request",
+            de: "Neuer Antrag",
+          })}
+          icon={<Send className="h-5 w-5" />}
+        >
           <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className={labelClass()}>
+              <label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 {text({
                   ro: "Data de început",
                   en: "Start date",
@@ -335,14 +315,14 @@ export default function EmployeeLeavePage() {
               <input
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className={cn("mt-2", inputClass())}
+                onChange={(event) => setStartDate(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
                 required
               />
             </div>
 
             <div>
-              <label className={labelClass()}>
+              <label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 {text({
                   ro: "Data de sfârșit",
                   en: "End date",
@@ -352,14 +332,14 @@ export default function EmployeeLeavePage() {
               <input
                 type="date"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className={cn("mt-2", inputClass())}
+                onChange={(event) => setEndDate(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
                 required
               />
             </div>
 
             <div className="md:col-span-2">
-              <label className={labelClass()}>
+              <label className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
                 {text({
                   ro: "Motiv",
                   en: "Reason",
@@ -368,14 +348,14 @@ export default function EmployeeLeavePage() {
               </label>
               <textarea
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                onChange={(event) => setReason(event.target.value)}
                 rows={4}
                 placeholder={text({
                   ro: "Motivul concediului",
                   en: "Reason for leave",
                   de: "Grund für den Urlaub",
                 })}
-                className={cn("mt-2 resize-none", textareaClass())}
+                className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
               />
             </div>
 
@@ -383,7 +363,7 @@ export default function EmployeeLeavePage() {
               <button
                 type="submit"
                 disabled={saving || !startDate || !endDate}
-                className={buttonPrimaryClass()}
+                className="inline-flex items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving
                   ? text({
@@ -399,31 +379,16 @@ export default function EmployeeLeavePage() {
               </button>
             </div>
           </form>
-        </div>
+        </SectionCard>
 
-        <div className={cardClass()}>
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-              <CalendarDays className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                {text({
-                  ro: "Rezumat",
-                  en: "Overview",
-                  de: "Übersicht",
-                })}
-              </p>
-              <h2 className="text-[17px] font-semibold text-slate-950">
-                {text({
-                  ro: "Informații rapide",
-                  en: "Quick details",
-                  de: "Schnellinfos",
-                })}
-              </h2>
-            </div>
-          </div>
-
+        <SectionCard
+          title={text({
+            ro: "Informații rapide",
+            en: "Quick details",
+            de: "Schnellinfos",
+          })}
+          icon={<CalendarDays className="h-5 w-5" />}
+        >
           <div className="space-y-2.5">
             <QuickRow
               label={text({
@@ -450,42 +415,30 @@ export default function EmployeeLeavePage() {
               value={String(approvedCount)}
             />
           </div>
-        </div>
+        </SectionCard>
       </section>
 
-      <section className={cardClass()}>
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-            <ClipboardList className="h-4.5 w-4.5" />
-          </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-              {text({
-                ro: "Istoric",
-                en: "History",
-                de: "Verlauf",
-              })}
-            </p>
-            <h2 className="text-[17px] font-semibold text-slate-950">
-              {text({
-                ro: "Cererile mele",
-                en: "My Requests",
-                de: "Meine Anträge",
-              })}
-            </h2>
-          </div>
-        </div>
-
+      <SectionCard
+        title={text({
+          ro: "Cererile mele",
+          en: "My Requests",
+          de: "Meine Anträge",
+        })}
+        icon={<ClipboardList className="h-5 w-5" />}
+      >
         {requests.length === 0 ? (
-          <div className={tileClass()}>
-            <p className="text-sm text-slate-500">
-              {text({
-                ro: "Nu există cereri de concediu.",
-                en: "There are no leave requests.",
-                de: "Es gibt keine Urlaubsanträge.",
-              })}
-            </p>
-          </div>
+          <EmptyState
+            title={text({
+              ro: "Nu există cereri de concediu",
+              en: "There are no leave requests",
+              de: "Es gibt keine Urlaubsanträge",
+            })}
+            description={text({
+              ro: "Cererile tale de concediu vor apărea aici.",
+              en: "Your leave requests will appear here.",
+              de: "Deine Urlaubsanträge erscheinen hier.",
+            })}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full border-separate border-spacing-0 text-sm">
@@ -511,8 +464,8 @@ export default function EmployeeLeavePage() {
               <tbody>
                 {requests.map((item) => (
                   <tr key={item.id} className="border-t border-slate-200">
-                    <td className="px-3 py-4">{formatDate(item.start_date, locale)}</td>
-                    <td className="px-3 py-4">{formatDate(item.end_date, locale)}</td>
+                    <td className="px-3 py-4">{formatDate(item.start_date, safeLocale)}</td>
+                    <td className="px-3 py-4">{formatDate(item.end_date, safeLocale)}</td>
                     <td className="px-3 py-4">{item.reason || "-"}</td>
                     <td className="px-3 py-4">
                       <span
@@ -524,34 +477,14 @@ export default function EmployeeLeavePage() {
                         {getStatusLabel(item.status)}
                       </span>
                     </td>
-                    <td className="px-3 py-4">{formatDate(item.created_at, locale)}</td>
+                    <td className="px-3 py-4">{formatDate(item.created_at, safeLocale)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </section>
-    </div>
-  );
-}
-
-function HeroStatCard({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[18px] border border-white/10 bg-white/5 p-3 backdrop-blur-sm">
-      <div className="flex items-center gap-2 text-slate-300">
-        {icon}
-        <span className="text-[10px] uppercase tracking-[0.14em]">{label}</span>
-      </div>
-      <p className="mt-2.5 line-clamp-2 text-sm font-semibold text-white">{value}</p>
+      </SectionCard>
     </div>
   );
 }

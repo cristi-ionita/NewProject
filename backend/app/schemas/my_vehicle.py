@@ -4,14 +4,13 @@ from pydantic import BaseModel, ConfigDict
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
-class ORMBaseSchema(BaseSchema):
-    model_config = ConfigDict(from_attributes=True, extra="forbid")
-
-
-class MyVehicleUserSchema(ORMBaseSchema):
+class MyVehicleUserSchema(BaseSchema):
     id: int
     full_name: str
     unique_code: str
@@ -19,7 +18,7 @@ class MyVehicleUserSchema(ORMBaseSchema):
     is_active: bool
 
 
-class MyVehicleVehicleSchema(ORMBaseSchema):
+class MyVehicleVehicleSchema(BaseSchema):
     id: int
     brand: str
     model: str

@@ -4,14 +4,13 @@ from pydantic import BaseModel, ConfigDict
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
-class ORMBaseSchema(BaseSchema):
-    model_config = ConfigDict(from_attributes=True, extra="forbid")
-
-
-class ProfileUserInfoSchema(ORMBaseSchema):
+class ProfileUserInfoSchema(BaseSchema):
     id: int
     full_name: str
     unique_code: str
@@ -20,7 +19,7 @@ class ProfileUserInfoSchema(ORMBaseSchema):
     is_active: bool
 
 
-class ProfileEmployeeInfoSchema(ORMBaseSchema):
+class ProfileEmployeeInfoSchema(BaseSchema):
     first_name: str
     last_name: str
     phone: str | None = None

@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +17,29 @@ class VehicleIssueStatus(str, Enum):
 
 class VehicleIssue(Base):
     __tablename__ = "vehicle_issues"
+
+    __table_args__ = (
+        CheckConstraint(
+            "need_service_in_km IS NULL OR need_service_in_km >= 0",
+            name="ck_vehicle_issues_need_service_in_km_non_negative",
+        ),
+        CheckConstraint(
+            "scheduled_location IS NULL OR char_length(trim(scheduled_location)) > 0",
+            name="ck_vehicle_issues_scheduled_location_not_blank_if_present",
+        ),
+        CheckConstraint(
+            "dashboard_checks IS NULL OR char_length(trim(dashboard_checks)) > 0",
+            name="ck_vehicle_issues_dashboard_checks_not_blank_if_present",
+        ),
+        CheckConstraint(
+            "other_problems IS NULL OR char_length(trim(other_problems)) > 0",
+            name="ck_vehicle_issues_other_problems_not_blank_if_present",
+        ),
+        CheckConstraint(
+            "status != 'scheduled' OR scheduled_for IS NOT NULL",
+            name="ck_vehicle_issues_scheduled_requires_datetime",
+        )
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
@@ -54,9 +77,13 @@ class VehicleIssue(Base):
     other_problems: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     status: Mapped[VehicleIssueStatus] = mapped_column(
-        SqlEnum(VehicleIssueStatus, name="vehicle_issue_status"),
-        default=VehicleIssueStatus.OPEN,
-        nullable=False,
+        SqlEnum(
+            VehicleIssueStatus,
+            name="vehicle_issue_status",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+            ),
+            default=VehicleIssueStatus.OPEN,
+            nullable=False,
     )
 
     scheduled_for: Mapped[datetime | None] = mapped_column(

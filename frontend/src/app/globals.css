@@ -1,25 +1,41 @@
 @import "tailwindcss";
 
 /* =========================
-   BASE
+   THEME TOKENS
 ========================= */
 
 :root {
   --background: #eef3f8;
+  --background-soft: #f5f8fc;
+  --background-deep: #e8eef5;
+
   --foreground: #0f172a;
+  --foreground-strong: #020617;
   --foreground-soft: #64748b;
 
   --card: rgba(255, 255, 255, 0.92);
   --card-solid: #ffffff;
   --card-border: rgba(148, 163, 184, 0.14);
 
+  --border-soft: rgba(148, 163, 184, 0.18);
+  --border-medium: rgba(148, 163, 184, 0.65);
+
   --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
   --shadow-sm: 0 10px 28px rgba(15, 23, 42, 0.06);
   --shadow-md: 0 18px 44px rgba(15, 23, 42, 0.08);
   --shadow-lg: 0 24px 60px rgba(15, 23, 42, 0.12);
 
+  --radius-md: 1rem;
+  --radius-lg: 24px;
+  --radius-xl: 28px;
+
   --transition-base: 180ms ease;
+  --focus-ring: 0 0 0 4px rgba(15, 23, 42, 0.06);
 }
+
+/* =========================
+   BASE
+========================= */
 
 html,
 body {
@@ -27,11 +43,15 @@ body {
   scroll-behavior: smooth;
 }
 
+html {
+  color-scheme: light;
+}
+
 body {
   margin: 0;
   background:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), transparent 28%),
-    linear-gradient(180deg, #f5f8fc 0%, #eef3f8 50%, #e8eef5 100%);
+    linear-gradient(180deg, var(--background-soft) 0%, var(--background) 50%, var(--background-deep) 100%);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
   text-rendering: optimizeLegibility;
@@ -46,12 +66,12 @@ body {
 }
 
 * {
-  border-color: rgba(148, 163, 184, 0.18);
+  border-color: var(--border-soft);
 }
 
 ::selection {
   background: rgba(15, 23, 42, 0.12);
-  color: #020617;
+  color: var(--foreground-strong);
 }
 
 img,
@@ -106,15 +126,15 @@ button:disabled {
 }
 
 *::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
   border-radius: 999px;
   background: rgba(100, 116, 139, 0.35);
-  border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 116, 139, 0.55);
   border: 2px solid transparent;
+  background: rgba(100, 116, 139, 0.55);
   background-clip: padding-box;
 }
 
@@ -127,7 +147,7 @@ button:disabled {
   min-height: 100vh;
   background:
     radial-gradient(circle at left top, rgba(255, 255, 255, 0.82), transparent 22%),
-    linear-gradient(180deg, #f7f9fc 0%, #eef3f8 100%);
+    linear-gradient(180deg, #f7f9fc 0%, var(--background) 100%);
 }
 
 .sidebar-panel {
@@ -147,10 +167,10 @@ button:disabled {
 }
 
 .content-area {
-  flex: 1;
   display: flex;
-  min-height: 100vh;
   min-width: 0;
+  min-height: 100vh;
+  flex: 1;
   flex-direction: column;
 }
 
@@ -183,19 +203,19 @@ button:disabled {
 
 .page-title {
   margin: 0;
+  color: var(--foreground-strong);
   font-size: clamp(1.75rem, 2.2vw, 2.35rem);
   line-height: 1.05;
   font-weight: 700;
   letter-spacing: -0.045em;
-  color: #020617;
 }
 
 .page-description {
   margin: 0;
   max-width: 72ch;
+  color: var(--foreground-soft);
   font-size: 0.95rem;
   line-height: 1.65;
-  color: var(--foreground-soft);
 }
 
 /* =========================
@@ -205,7 +225,7 @@ button:disabled {
 .section-card,
 .stat-card {
   border: 1px solid var(--card-border);
-  border-radius: 28px;
+  border-radius: var(--radius-xl);
   padding: 1.5rem;
   background: var(--card);
   box-shadow: var(--shadow-sm);
@@ -220,23 +240,23 @@ button:disabled {
 .section-card:hover,
 .stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
   border-color: rgba(100, 116, 139, 0.2);
+  box-shadow: var(--shadow-md);
 }
 
 .card-title {
+  color: var(--foreground-soft);
   font-size: 0.875rem;
   font-weight: 500;
-  color: #64748b;
 }
 
 .card-value {
   margin-top: 0.75rem;
+  color: var(--foreground-strong);
   font-size: 2.25rem;
-  font-weight: 600;
   line-height: 1;
+  font-weight: 600;
   letter-spacing: -0.03em;
-  color: #020617;
 }
 
 /* =========================
@@ -250,7 +270,7 @@ button:disabled {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 1rem;
+  border-radius: var(--radius-md);
   padding: 0.675rem 1rem;
   font-size: 0.875rem;
   font-weight: 500;
@@ -264,14 +284,14 @@ button:disabled {
 
 .btn-primary {
   border: none;
-  color: white;
+  color: #ffffff;
   background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
   transform: translateY(-1px);
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
 }
 
 .btn-secondary {
@@ -282,20 +302,20 @@ button:disabled {
 }
 
 .btn-secondary:hover {
-  background: #f8fafc;
   transform: translateY(-1px);
+  background: #f8fafc;
 }
 
 .btn-danger {
   border: none;
-  color: white;
+  color: #ffffff;
   background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
   box-shadow: 0 10px 24px rgba(220, 38, 38, 0.18);
 }
 
 .btn-danger:hover {
-  background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
   transform: translateY(-1px);
+  background: linear-gradient(180deg, #dc2626 0%, #b91c1c 100%);
 }
 
 .btn-primary:disabled,
@@ -313,10 +333,10 @@ button:disabled {
 .input {
   width: 100%;
   border: 1px solid rgba(203, 213, 225, 0.9);
-  border-radius: 1rem;
+  border-radius: var(--radius-md);
   padding: 0.78rem 1rem;
   background: rgba(255, 255, 255, 0.96);
-  color: #0f172a;
+  color: var(--foreground);
   font-size: 0.875rem;
   outline: none;
   box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
@@ -331,25 +351,25 @@ button:disabled {
 }
 
 .input:hover {
-  border-color: rgba(148, 163, 184, 0.65);
+  border-color: var(--border-medium);
 }
 
 .input:focus {
   border-color: rgba(51, 65, 85, 0.32);
   background: #ffffff;
   box-shadow:
-    0 0 0 4px rgba(15, 23, 42, 0.06),
+    var(--focus-ring),
     inset 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
 .label {
   display: block;
   margin-bottom: 0.375rem;
+  color: var(--foreground-soft);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.14em;
-  color: #64748b;
 }
 
 /* =========================
@@ -359,7 +379,7 @@ button:disabled {
 .table-wrap {
   overflow: hidden;
   border: 1px solid var(--card-border);
-  border-radius: 28px;
+  border-radius: var(--radius-xl);
   background: var(--card-solid);
   box-shadow: var(--shadow-sm);
 }
@@ -372,14 +392,14 @@ button:disabled {
 }
 
 .table-base thead tr {
-  background: rgba(248, 250, 252, 0.84);
   border-bottom: 1px solid #e2e8f0;
+  background: rgba(248, 250, 252, 0.84);
   text-align: left;
+  color: var(--foreground-soft);
   font-size: 0.6875rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #64748b;
 }
 
 .table-base th {
@@ -388,9 +408,9 @@ button:disabled {
 
 .table-base td {
   padding: 1rem 1.5rem;
-  font-size: 0.875rem;
-  color: #334155;
   vertical-align: top;
+  color: #334155;
+  font-size: 0.875rem;
 }
 
 .table-base tbody tr {
@@ -420,32 +440,32 @@ button:disabled {
 }
 
 .badge-slate {
-  background: #f1f5f9;
   color: #334155;
+  background: #f1f5f9;
 }
 
 .badge-blue {
   border: 1px solid #bfdbfe;
-  background: #eff6ff;
   color: #1d4ed8;
+  background: #eff6ff;
 }
 
 .badge-green {
   border: 1px solid #a7f3d0;
-  background: #ecfdf5;
   color: #047857;
+  background: #ecfdf5;
 }
 
 .badge-yellow {
   border: 1px solid #fde68a;
-  background: #fffbeb;
   color: #b45309;
+  background: #fffbeb;
 }
 
 .badge-red {
   border: 1px solid #fecaca;
-  background: #fef2f2;
   color: #b91c1c;
+  background: #fef2f2;
 }
 
 /* =========================
@@ -458,7 +478,7 @@ button:disabled {
   align-items: center;
   justify-content: center;
   border: 1px dashed #cbd5e1;
-  border-radius: 28px;
+  border-radius: var(--radius-xl);
   background: rgba(255, 255, 255, 0.76);
   padding: 3.5rem 1.5rem;
   text-align: center;
@@ -466,18 +486,18 @@ button:disabled {
 
 .empty-state-title {
   margin-top: 1rem;
+  color: var(--foreground);
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.03em;
-  color: #0f172a;
 }
 
 .empty-state-description {
   margin-top: 0.5rem;
   max-width: 28rem;
+  color: var(--foreground-soft);
   font-size: 0.875rem;
   line-height: 1.6;
-  color: #64748b;
 }
 
 /* =========================
@@ -507,6 +527,6 @@ button:disabled {
   .stat-card,
   .table-wrap,
   .empty-state {
-    border-radius: 24px;
+    border-radius: var(--radius-lg);
   }
 }

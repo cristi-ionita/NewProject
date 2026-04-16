@@ -5,11 +5,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class ORMBaseSchema(BaseSchema):
-    model_config = ConfigDict(from_attributes=True, extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
 class VehicleStatus(str, Enum):
@@ -71,7 +70,7 @@ class VehicleUpdateSchema(BaseSchema):
     current_mileage: int | None = Field(default=None, ge=0)
 
 
-class VehicleReadSchema(VehicleBaseSchema, ORMBaseSchema):
+class VehicleReadSchema(VehicleBaseSchema):
     id: int
     created_at: datetime
     updated_at: datetime

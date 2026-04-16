@@ -1,34 +1,61 @@
+export type ApiErrorResponse = {
+  error?: string;
+  message?: string;
+  details?: Array<{ msg?: string }>;
+  detail?:
+    | string
+    | Array<{ msg?: string }>
+    | {
+        msg?: string;
+      };
+};
+
 export function extractErrorMessage(
   error: unknown,
   fallback = "Something went wrong."
 ): string {
-  // axios / backend error
   if (typeof error === "object" && error !== null && "response" in error) {
     const err = error as {
       response?: {
         status?: number;
-        data?: {
-          detail?: unknown;
-        };
+        data?: ApiErrorResponse;
       };
     };
 
     const status = err.response?.status;
-    const detail = err.response?.data?.detail;
+    const data = err.response?.data;
 
-    // ✅ dacă backend trimite string → îl folosim direct
-    if (typeof detail === "string" && detail.trim()) {
-      return detail;
+    if (typeof data?.message === "string" && data.message.trim()) {
+      return data.message;
     }
 
-    // ✅ dacă backend trimite listă de erori (FastAPI validation)
-    if (Array.isArray(detail)) {
-      return detail
-        .map((item: any) => item?.msg || "Invalid value")
+    if (Array.isArray(data?.details)) {
+      return data.details
+        .map((item) => item?.msg || "Invalid value")
         .join(", ");
     }
 
-    // ✅ fallback pe status code
+    const legacyDetail = data?.detail;
+
+    if (typeof legacyDetail === "string" && legacyDetail.trim()) {
+      return legacyDetail;
+    }
+
+    if (Array.isArray(legacyDetail)) {
+      return legacyDetail
+        .map((item) => item?.msg || "Invalid value")
+        .join(", ");
+    }
+
+    if (
+      typeof legacyDetail === "object" &&
+      legacyDetail !== null &&
+      typeof legacyDetail.msg === "string" &&
+      legacyDetail.msg.trim()
+    ) {
+      return legacyDetail.msg;
+    }
+
     if (status === 400) return "Invalid request.";
     if (status === 401) return "Invalid credentials.";
     if (status === 403) return "Access denied.";
@@ -40,6 +67,5 @@ export function extractErrorMessage(
     }
   }
 
-  // ❌ fallback general
   return fallback;
 }

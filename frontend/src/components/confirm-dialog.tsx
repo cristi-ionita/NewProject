@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import React from 'react';
+import { useEffect } from "react";
 
 type ConfirmDialogProps = {
   open: boolean;
@@ -16,23 +16,68 @@ type ConfirmDialogProps = {
 
 export default function ConfirmDialog({
   open,
-  title = 'Confirmare',
+  title = "Confirmare",
   message,
-  confirmText = 'Confirmă',
-  cancelText = 'Anulează',
+  confirmText = "Confirmă",
+  cancelText = "Anulează",
   loading = false,
-  loadingText = 'Se procesează...',
+  loadingText = "Se procesează...",
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  if (!open) return null;
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !loading) {
+        onCancel();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open, loading, onCancel]);
+
+  if (!open) {
+    return null;
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.22)]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-dialog-title"
+      aria-describedby="confirm-dialog-description"
+      onClick={!loading ? onCancel : undefined}
+    >
+      <div
+        className="w-full max-w-md rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.22)]"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="space-y-2">
-          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
-          <p className="text-sm leading-6 text-slate-600">{message}</p>
+          <h2
+            id="confirm-dialog-title"
+            className="text-lg font-semibold text-slate-950"
+          >
+            {title}
+          </h2>
+
+          <p
+            id="confirm-dialog-description"
+            className="text-sm leading-6 text-slate-600"
+          >
+            {message}
+          </p>
         </div>
 
         <div className="mt-5 flex justify-end gap-2">

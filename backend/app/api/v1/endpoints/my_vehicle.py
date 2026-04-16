@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.dependencies import get_current_driver
 from app.db.models.user import User
 from app.db.models.vehicle_assignment import AssignmentStatus, VehicleAssignment
 from app.db.models.vehicle_handover_report import VehicleHandoverReport
@@ -23,23 +24,6 @@ router = APIRouter(prefix="/my-vehicle", tags=["my-vehicle"])
 # =========================
 # HELPERS
 # =========================
-
-
-async def get_user_by_code_or_404(db: AsyncSession, code: str) -> User:
-    user = (
-        await db.execute(select(User).where(User.unique_code == code.strip()))
-    ).scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(404, "User not found.")
-
-    return user
-
-
-def ensure_user_is_active(user: User) -> None:
-    if not user.is_active:
-        raise HTTPException(403, "User inactiv.")
-
 
 async def get_active_assignment_for_user(
     db: AsyncSession,
@@ -68,24 +52,7 @@ async def get_handover_report(
     ).scalar_one_or_none()
 
 
-# =========================
-# BUILDERS
-# =========================
-
-
 def build_handover_start(report: VehicleHandoverReport) -> MyVehicleHandoverStartSchema:
-    is_completed = (
-        report.mileage_start is not None
-        or report.dashboard_warnings_start is not None
-        or report.damage_notes_start is not None
-        or report.notes_start is not None
-        or report.has_documents
-        or report.has_medkit
-        or report.has_extinguisher
-        or report.has_warning_triangle
-        or report.has_spare_wheel
-    )
-
     return MyVehicleHandoverStartSchema(
         mileage_start=report.mileage_start,
         dashboard_warnings_start=report.dashboard_warnings_start,
@@ -96,24 +63,36 @@ def build_handover_start(report: VehicleHandoverReport) -> MyVehicleHandoverStar
         has_extinguisher=report.has_extinguisher,
         has_warning_triangle=report.has_warning_triangle,
         has_spare_wheel=report.has_spare_wheel,
-        is_completed=is_completed,
+        is_completed=any(
+            [
+                report.mileage_start,
+                report.dashboard_warnings_start,
+                report.damage_notes_start,
+                report.notes_start,
+                report.has_documents,
+                report.has_medkit,
+                report.has_extinguisher,
+                report.has_warning_triangle,
+                report.has_spare_wheel,
+            ]
+        ),
     )
 
 
 def build_handover_end(report: VehicleHandoverReport) -> MyVehicleHandoverEndSchema:
-    is_completed = (
-        report.mileage_end is not None
-        or report.dashboard_warnings_end is not None
-        or report.damage_notes_end is not None
-        or report.notes_end is not None
-    )
-
     return MyVehicleHandoverEndSchema(
         mileage_end=report.mileage_end,
         dashboard_warnings_end=report.dashboard_warnings_end,
         damage_notes_end=report.damage_notes_end,
         notes_end=report.notes_end,
-        is_completed=is_completed,
+        is_completed=any(
+            [
+                report.mileage_end,
+                report.dashboard_warnings_end,
+                report.damage_notes_end,
+                report.notes_end,
+            ]
+        ),
     )
 
 
@@ -136,21 +115,17 @@ def build_issue(issue: VehicleIssue) -> MyVehicleIssueSchema:
 # ENDPOINT
 # =========================
 
-
-@router.get("/{code}", response_model=MyVehicleResponseSchema)
+@router.get("", response_model=MyVehicleResponseSchema)
 async def get_my_vehicle_page(
-    code: str,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_driver),
 ) -> MyVehicleResponseSchema:
-    user = await get_user_by_code_or_404(db, code)
-    ensure_user_is_active(user)
+    assignment = await get_active_assignment_for_user(db, current_user.id)
 
-    assignment = await get_active_assignment_for_user(db, user.id)
-
-    # ❗ fără mașină
+    # fără mașină
     if assignment is None:
         return MyVehicleResponseSchema(
-            user=MyVehicleUserSchema.model_validate(user),
+            user=MyVehicleUserSchema.model_validate(current_user),
             vehicle=None,
             assignment=None,
             handover_start=None,
@@ -158,7 +133,7 @@ async def get_my_vehicle_page(
             open_issues=[],
         )
 
-    await db.refresh(assignment, attribute_names=["vehicle"])
+    await db.refresh(assignment, ["vehicle"])
 
     report = await get_handover_report(db, assignment.id)
 
@@ -178,7 +153,7 @@ async def get_my_vehicle_page(
     )
 
     return MyVehicleResponseSchema(
-        user=MyVehicleUserSchema.model_validate(user),
+        user=MyVehicleUserSchema.model_validate(current_user),
         vehicle=MyVehicleVehicleSchema(
             id=assignment.vehicle.id,
             brand=assignment.vehicle.brand,

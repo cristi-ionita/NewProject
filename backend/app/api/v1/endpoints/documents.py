@@ -5,26 +5,12 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    File,
-    Form,
-    HTTPException,
-    Response,
-    UploadFile,
-    status,
-)
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.dependencies import (
-    ensure_user_is_active,
-    get_current_admin,
-    get_user_by_code_or_404,
-)
-from app.core.constants import ALLOWED_DOCUMENT_CONTENT_TYPES
+from app.api.v1.dependencies import get_current_admin, get_current_driver
 from app.db.models.document import (
     Document,
     DocumentCategory,
@@ -40,10 +26,35 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 UPLOAD_DIR = Path("uploads/documents")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+ALLOWED_TYPES = {
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+}
 
-# =========================
-# HELPERS
-# =========================
+
+def validate_file(file: UploadFile) -> None:
+    if file.content_type not in ALLOWED_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Tip fișier neacceptat.",
+        )
+
+    if not file.filename or not file.filename.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Fișier invalid.",
+        )
+
+    if file.content_type == "application/pdf":
+        header = file.file.read(4)
+        file.file.seek(0)
+
+        if header != b"%PDF":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Fișier PDF invalid.",
+            )
 
 
 def parse_document_type(value: str) -> DocumentType:
@@ -66,139 +77,55 @@ def parse_document_category(value: str) -> DocumentCategory:
         ) from err
 
 
-def ensure_allowed_file(upload_file: UploadFile) -> None:
-    if upload_file.content_type not in ALLOWED_DOCUMENT_CONTENT_TYPES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tip fișier neacceptat.",
-        )
-
-    if not upload_file.filename or not upload_file.filename.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Fișier invalid.",
-        )
-
-
-def remove_file_if_exists(file_path: str) -> None:
-    path = Path(file_path)
-    if path.exists() and path.is_file():
-        path.unlink()
-
-
-def save_uploaded_file(upload_file: UploadFile, user_id: int) -> tuple[str, str, str]:
+def save_file(file: UploadFile, user_id: int) -> tuple[str, str]:
     user_dir = UPLOAD_DIR / f"user_{user_id}"
     user_dir.mkdir(parents=True, exist_ok=True)
 
-    original_name = upload_file.filename.strip()
+    original_name = Path(file.filename).name
     safe_name = f"{uuid.uuid4().hex}_{original_name}"
-    file_path = user_dir / safe_name
+    path = user_dir / safe_name
 
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(upload_file.file, buffer)
+    with path.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
 
-    return original_name, str(file_path), upload_file.content_type or "application/octet-stream"
+    return original_name, str(path)
 
 
-async def get_user_by_id_or_404(db: AsyncSession, user_id: int) -> User:
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+async def get_document_or_404(db: AsyncSession, doc_id: int) -> Document:
+    doc = (
+        await db.execute(select(Document).where(Document.id == doc_id))
+    ).scalar_one_or_none()
 
-    if not user:
+    if doc is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Utilizatorul nu există.",
+            detail="Document not found.",
         )
 
-    return user
+    return doc
 
 
-async def get_document_by_id_or_404(db: AsyncSession, document_id: int) -> Document:
-    result = await db.execute(select(Document).where(Document.id == document_id))
-    document = result.scalar_one_or_none()
-
-    if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Documentul nu există.",
-        )
-
-    return document
-
-
-def build_document_query(user_id: int, category: str | None, type: str | None):
-    query = select(Document).where(Document.user_id == user_id)
-
-    if category:
-        query = query.where(Document.category == parse_document_category(category))
-
-    if type:
-        query = query.where(Document.type == parse_document_type(type))
-
-    return query.order_by(Document.created_at.desc())
-
-
-# =========================
-# ENDPOINTS
-# =========================
-
-
-@router.get("/admin/user/{user_id}", response_model=list[DocumentReadSchema])
-async def get_user_documents_for_admin(
-    user_id: int,
-    category: str | None = None,
-    type: str | None = None,
-    db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-):
-    user = await get_user_by_id_or_404(db, user_id)
-
-    result = await db.execute(build_document_query(user.id, category, type))
-    documents = result.scalars().all()
-
-    return [DocumentReadSchema.model_validate(doc) for doc in documents]
-
-
-@router.get("/me/{code}", response_model=list[DocumentReadSchema])
-async def get_my_documents(
-    code: str,
-    category: str | None = None,
-    type: str | None = None,
-    db: AsyncSession = Depends(get_db),
-):
-    user = await get_user_by_code_or_404(code, db)
-    ensure_user_is_active(user)
-
-    result = await db.execute(build_document_query(user.id, category, type))
-    documents = result.scalars().all()
-
-    return [DocumentReadSchema.model_validate(doc) for doc in documents]
-
-
-@router.post("/upload/{code}", response_model=DocumentReadSchema, status_code=201)
+@router.post("/upload", response_model=DocumentReadSchema, status_code=status.HTTP_201_CREATED)
 async def upload_my_document(
-    code: str,
     type: str = Form(...),
     file: UploadFile = File(...),
     expires_at: datetime | None = Form(None),
     db: AsyncSession = Depends(get_db),
-):
-    user = await get_user_by_code_or_404(code, db)
-    ensure_user_is_active(user)
+    current_user: User = Depends(get_current_driver),
+) -> DocumentReadSchema:
+    validate_file(file)
 
-    ensure_allowed_file(file)
-
-    file_name, file_path, mime_type = save_uploaded_file(file, user.id)
+    original_name, path = save_file(file, current_user.id)
 
     document = Document(
-        user_id=user.id,
-        uploaded_by=user.id,
+        user_id=current_user.id,
+        uploaded_by=current_user.id,
         type=parse_document_type(type),
         category=DocumentCategory.PERSONAL,
         status=DocumentStatus.ACTIVE,
-        file_name=file_name,
-        file_path=file_path,
-        mime_type=mime_type,
+        file_name=original_name,
+        file_path=path,
+        mime_type=file.content_type,
         expires_at=expires_at,
     )
 
@@ -209,94 +136,122 @@ async def upload_my_document(
     return DocumentReadSchema.model_validate(document)
 
 
-@router.get("/{document_id}/download/{code}")
-async def download_document(
-    document_id: int,
-    code: str,
+@router.get("/me", response_model=list[DocumentReadSchema])
+async def get_my_documents(
     db: AsyncSession = Depends(get_db),
-):
-    user = await get_user_by_code_or_404(code, db)
-    ensure_user_is_active(user)
-
-    document = await get_document_by_id_or_404(db, document_id)
-
-    if document.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Acces interzis.")
-
-    file_path = Path(document.file_path)
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fișier lipsă.")
-
-    return FileResponse(
-        path=file_path,
-        filename=document.file_name,
-        media_type=document.mime_type,
+    current_user: User = Depends(get_current_driver),
+) -> list[DocumentReadSchema]:
+    result = await db.execute(
+        select(Document)
+        .where(Document.user_id == current_user.id)
+        .order_by(Document.created_at.desc())
     )
 
+    return [DocumentReadSchema.model_validate(d) for d in result.scalars().all()]
 
-@router.get("/admin/{document_id}/download")
-async def admin_download_document(
-    document_id: int,
+
+@router.get("/{doc_id}/download")
+async def download_my_document(
+    doc_id: int,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
+    current_user: User = Depends(get_current_driver),
 ):
-    document = await get_document_by_id_or_404(db, document_id)
+    doc = await get_document_or_404(db, doc_id)
 
-    file_path = Path(document.file_path)
+    if doc.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied.",
+        )
 
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fișier lipsă.")
+    path = Path(doc.file_path)
 
-    return FileResponse(
-        path=file_path,
-        filename=document.file_name,
-        media_type=document.mime_type,
-    )
+    if not path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File missing.",
+        )
+
+    return FileResponse(path, filename=doc.file_name, media_type=doc.mime_type)
 
 
-@router.delete("/me/{document_id}/{code}", status_code=204)
+@router.delete("/{doc_id}")
 async def delete_my_document(
-    document_id: int,
-    code: str,
+    doc_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_driver),
 ):
-    user = await get_user_by_code_or_404(code, db)
-    ensure_user_is_active(user)
+    doc = await get_document_or_404(db, doc_id)
 
-    document = await get_document_by_id_or_404(db, document_id)
+    if doc.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied.",
+        )
 
-    if document.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Acces interzis.")
+    Path(doc.file_path).unlink(missing_ok=True)
 
-    if document.category != DocumentCategory.PERSONAL:
-        raise HTTPException(status_code=403, detail="Doar documente personale.")
-
-    remove_file_if_exists(document.file_path)
-
-    await db.delete(document)
+    await db.delete(doc)
     await db.commit()
 
-    return Response(status_code=204)
+    return {"ok": True}
 
 
-@router.delete("/admin/{document_id}", status_code=204)
+@router.get("/admin/{user_id}", response_model=list[DocumentReadSchema])
+async def get_user_documents(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+) -> list[DocumentReadSchema]:
+    result = await db.execute(
+        select(Document)
+        .where(Document.user_id == user_id)
+        .order_by(Document.created_at.desc())
+    )
+
+    return [DocumentReadSchema.model_validate(d) for d in result.scalars().all()]
+
+
+@router.get("/admin/{doc_id}/download")
+async def admin_download_document(
+    doc_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_admin),
+):
+    doc = await get_document_or_404(db, doc_id)
+
+    path = Path(doc.file_path)
+
+    if not path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File missing.",
+        )
+
+    return FileResponse(path, filename=doc.file_name, media_type=doc.mime_type)
+
+
+@router.delete("/admin/{doc_id}")
 async def admin_delete_document(
-    document_id: int,
+    doc_id: int,
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
+    _: User = Depends(get_current_admin),
 ):
-    document = await get_document_by_id_or_404(db, document_id)
+    doc = await get_document_or_404(db, doc_id)
 
-    remove_file_if_exists(document.file_path)
+    Path(doc.file_path).unlink(missing_ok=True)
 
-    await db.delete(document)
+    await db.delete(doc)
     await db.commit()
 
-    return Response(status_code=204)
+    return {"ok": True}
 
 
-@router.post("/admin/upload/{user_id}", response_model=DocumentReadSchema, status_code=201)
+@router.post(
+    "/admin/upload/{user_id}",
+    response_model=DocumentReadSchema,
+    status_code=status.HTTP_201_CREATED,
+)
 async def admin_upload_document(
     user_id: int,
     type: str = Form(...),
@@ -304,23 +259,21 @@ async def admin_upload_document(
     file: UploadFile = File(...),
     expires_at: datetime | None = Form(None),
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-):
-    user = await get_user_by_id_or_404(db, user_id)
+    _: User = Depends(get_current_admin),
+) -> DocumentReadSchema:
+    validate_file(file)
 
-    ensure_allowed_file(file)
-
-    file_name, file_path, mime_type = save_uploaded_file(file, user.id)
+    original_name, path = save_file(file, user_id)
 
     document = Document(
-        user_id=user.id,
+        user_id=user_id,
         uploaded_by=None,
         type=parse_document_type(type),
         category=parse_document_category(category),
         status=DocumentStatus.ACTIVE,
-        file_name=file_name,
-        file_path=file_path,
-        mime_type=mime_type,
+        file_name=original_name,
+        file_path=path,
+        mime_type=file.content_type,
         expires_at=expires_at,
     )
 

@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import get_current_admin
@@ -10,75 +12,65 @@ from app.db.models.vehicle import Vehicle
 from app.db.models.vehicle_assignment import AssignmentStatus, VehicleAssignment
 from app.db.models.vehicle_issue import VehicleIssue, VehicleIssueStatus
 from app.db.session import get_db
-from app.schemas.admin_dashboard_alerts import (
-    DashboardOccupiedVehicleSchema,
-    DashboardUserAlertSchema,
-    DashboardVehicleIssueAlertSchema,
-    OccupiedVehiclesResponse,
-    UsersWithoutContractResponse,
-    UsersWithoutDriverLicenseResponse,
-    UsersWithoutProfileResponse,
-    VehiclesWithOpenIssuesResponse,
-)
 
 router = APIRouter(prefix="/admin-dashboard-alerts", tags=["admin-dashboard-alerts"])
 
 
-def build_user_alert(user: User) -> DashboardUserAlertSchema:
-    return DashboardUserAlertSchema(
-        user_id=user.id,
-        full_name=user.full_name,
-        unique_code=user.unique_code,
-        shift_number=user.shift_number,
-        is_active=user.is_active,
-    )
+# =========================
+# USERS WITHOUT PROFILE
+# =========================
 
-
-@router.get("/users-without-profile", response_model=UsersWithoutProfileResponse)
-async def get_users_without_profile(
+@router.get("/users-without-profile")
+async def users_without_profile(
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-) -> UsersWithoutProfileResponse:
+    _: object = Depends(get_current_admin),
+):
     result = await db.execute(
-        select(User)
+        select(User.id, User.full_name, User.unique_code)
         .outerjoin(EmployeeProfile, EmployeeProfile.user_id == User.id)
         .where(EmployeeProfile.id.is_(None))
-        .order_by(User.full_name.asc())
+        .order_by(User.full_name)
     )
-    users = result.scalars().all()
 
-    return UsersWithoutProfileResponse(users=[build_user_alert(user) for user in users])
+    return {"users": [dict(row._mapping) for row in result]}
 
 
-@router.get("/users-without-contract", response_model=UsersWithoutContractResponse)
-async def get_users_without_contract(
+# =========================
+# USERS WITHOUT CONTRACT
+# =========================
+
+@router.get("/users-without-contract")
+async def users_without_contract(
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-) -> UsersWithoutContractResponse:
-    contract_subquery = (
-        select(Document.user_id).where(Document.type == DocumentType.CONTRACT).distinct().subquery()
+    _: object = Depends(get_current_admin),
+):
+    sub = (
+        select(Document.user_id)
+        .where(Document.type == DocumentType.CONTRACT)
+        .distinct()
+        .subquery()
     )
 
     result = await db.execute(
-        select(User)
-        .outerjoin(contract_subquery, contract_subquery.c.user_id == User.id)
-        .where(contract_subquery.c.user_id.is_(None))
-        .order_by(User.full_name.asc())
+        select(User.id, User.full_name)
+        .outerjoin(sub, sub.c.user_id == User.id)
+        .where(sub.c.user_id.is_(None))
+        .order_by(User.full_name)
     )
-    users = result.scalars().all()
 
-    return UsersWithoutContractResponse(users=[build_user_alert(user) for user in users])
+    return {"users": [dict(row._mapping) for row in result]}
 
 
-@router.get(
-    "/users-without-driver-license",
-    response_model=UsersWithoutDriverLicenseResponse,
-)
-async def get_users_without_driver_license(
+# =========================
+# USERS WITHOUT LICENSE
+# =========================
+
+@router.get("/users-without-driver-license")
+async def users_without_license(
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-) -> UsersWithoutDriverLicenseResponse:
-    driver_license_subquery = (
+    _: object = Depends(get_current_admin),
+):
+    sub = (
         select(Document.user_id)
         .where(Document.type == DocumentType.DRIVER_LICENSE)
         .distinct()
@@ -86,104 +78,77 @@ async def get_users_without_driver_license(
     )
 
     result = await db.execute(
-        select(User)
-        .outerjoin(driver_license_subquery, driver_license_subquery.c.user_id == User.id)
-        .where(driver_license_subquery.c.user_id.is_(None))
-        .order_by(User.full_name.asc())
+        select(User.id, User.full_name)
+        .outerjoin(sub, sub.c.user_id == User.id)
+        .where(sub.c.user_id.is_(None))
+        .order_by(User.full_name)
     )
-    users = result.scalars().all()
 
-    return UsersWithoutDriverLicenseResponse(users=[build_user_alert(user) for user in users])
+    return {"users": [dict(row._mapping) for row in result]}
 
 
-@router.get("/vehicles-with-open-issues", response_model=VehiclesWithOpenIssuesResponse)
-async def get_vehicles_with_open_issues(
+# =========================
+# VEHICLES WITH ISSUES (OPTIMIZED)
+# =========================
+
+@router.get("/vehicles-with-issues")
+async def vehicles_with_issues(
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-) -> VehiclesWithOpenIssuesResponse:
-    vehicles_result = await db.execute(select(Vehicle).order_by(Vehicle.license_plate.asc()))
-    vehicles = vehicles_result.scalars().all()
-
-    response_items: list[DashboardVehicleIssueAlertSchema] = []
-
-    for vehicle in vehicles:
-        open_count = (
-            await db.scalar(
-                select(func.count(VehicleIssue.id)).where(
-                    and_(
-                        VehicleIssue.vehicle_id == vehicle.id,
-                        VehicleIssue.status == VehicleIssueStatus.OPEN,
-                    )
-                )
-            )
-            or 0
-        )
-
-        in_progress_count = (
-            await db.scalar(
-                select(func.count(VehicleIssue.id)).where(
-                    and_(
-                        VehicleIssue.vehicle_id == vehicle.id,
-                        VehicleIssue.status == VehicleIssueStatus.IN_PROGRESS,
-                    )
-                )
-            )
-            or 0
-        )
-
-        latest_issue_created_at = await db.scalar(
-            select(func.max(VehicleIssue.created_at)).where(
-                and_(
-                    VehicleIssue.vehicle_id == vehicle.id,
-                    VehicleIssue.status.in_(
-                        [VehicleIssueStatus.OPEN, VehicleIssueStatus.IN_PROGRESS]
-                    ),
-                )
-            )
-        )
-
-        if open_count > 0 or in_progress_count > 0:
-            response_items.append(
-                DashboardVehicleIssueAlertSchema(
-                    vehicle_id=vehicle.id,
-                    license_plate=vehicle.license_plate,
-                    brand=vehicle.brand,
-                    model=vehicle.model,
-                    open_issues_count=int(open_count),
-                    in_progress_issues_count=int(in_progress_count),
-                    latest_issue_created_at=latest_issue_created_at,
-                )
-            )
-
-    return VehiclesWithOpenIssuesResponse(vehicles=response_items)
-
-
-@router.get("/occupied-vehicles", response_model=OccupiedVehiclesResponse)
-async def get_occupied_vehicles(
-    db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-) -> OccupiedVehiclesResponse:
+    _: object = Depends(get_current_admin),
+):
     result = await db.execute(
-        select(VehicleAssignment, Vehicle, User)
+        select(
+            Vehicle.id,
+            Vehicle.license_plate,
+            Vehicle.brand,
+            Vehicle.model,
+            func.count(VehicleIssue.id).label("issues_count"),
+        )
+        .join(VehicleIssue, VehicleIssue.vehicle_id == Vehicle.id)
+        .where(
+            VehicleIssue.status.in_(
+                [VehicleIssueStatus.OPEN, VehicleIssueStatus.IN_PROGRESS]
+            )
+        )
+        .group_by(Vehicle.id)
+        .order_by(func.count(VehicleIssue.id).desc())
+    )
+
+    return {"vehicles": [dict(row._mapping) for row in result]}
+
+
+# =========================
+# OCCUPIED VEHICLES
+# =========================
+
+@router.get("/occupied-vehicles")
+async def occupied_vehicles(
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(get_current_admin),
+):
+    result = await db.execute(
+        select(
+            VehicleAssignment.id,
+            Vehicle.license_plate,
+            Vehicle.brand,
+            Vehicle.model,
+            User.full_name,
+            VehicleAssignment.started_at,
+        )
         .join(Vehicle, Vehicle.id == VehicleAssignment.vehicle_id)
         .join(User, User.id == VehicleAssignment.user_id)
         .where(VehicleAssignment.status == AssignmentStatus.ACTIVE)
         .order_by(VehicleAssignment.started_at.desc())
     )
-    rows = result.all()
 
-    return OccupiedVehiclesResponse(
-        vehicles=[
-            DashboardOccupiedVehicleSchema(
-                assignment_id=assignment.id,
-                vehicle_id=vehicle.id,
-                license_plate=vehicle.license_plate,
-                brand=vehicle.brand,
-                model=vehicle.model,
-                user_id=user.id,
-                user_name=user.full_name,
-                started_at=assignment.started_at,
-            )
-            for assignment, vehicle, user in rows
+    return {
+        "vehicles": [
+            {
+                "assignment_id": r.id,
+                "vehicle": f"{r.brand} {r.model} ({r.license_plate})",
+                "user": r.full_name,
+                "started_at": r.started_at,
+            }
+            for r in result
         ]
-    )
+    }

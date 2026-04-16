@@ -1,18 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+
+import type { Locale } from "@/lib/i18n/dictionaries";
 import { useI18n } from "@/lib/i18n/use-i18n";
 
-const languages = [
+const languages: Array<{ code: Locale; label: string; short: string }> = [
   { code: "ro", label: "Română", short: "RO" },
   { code: "en", label: "English", short: "EN" },
   { code: "de", label: "Deutsch", short: "DE" },
-] as const;
+];
 
 export default function LanguageSwitcher() {
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const menuId = useId();
 
   const activeLanguage =
     languages.find((language) => language.code === locale) ?? languages[0];
@@ -42,7 +45,7 @@ export default function LanguageSwitcher() {
     };
   }, []);
 
-  function handleSelectLanguage(code: "ro" | "en" | "de") {
+  function handleSelectLanguage(code: Locale) {
     setLocale(code);
     setOpen(false);
   }
@@ -54,7 +57,8 @@ export default function LanguageSwitcher() {
         onClick={() => setOpen((prev) => !prev)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/90 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:text-slate-900"
+        aria-controls={menuId}
+        className="inline-flex items-center gap-3 rounded-2xl border border-slate-200 bg-white/90 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:border-slate-300 hover:bg-white hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
       >
         <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-sm">
           🌐
@@ -78,12 +82,14 @@ export default function LanguageSwitcher() {
       </button>
 
       <div
+        id={menuId}
         className={`absolute right-0 top-[calc(100%+0.75rem)] z-50 w-56 origin-top-right rounded-[24px] border border-slate-200 bg-white/95 p-2 shadow-[0_20px_50px_rgba(15,23,42,0.14)] backdrop-blur transition-all duration-200 ${
           open
             ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
             : "pointer-events-none -translate-y-1 scale-95 opacity-0"
         }`}
         role="menu"
+        aria-label="Language selector"
       >
         {languages.map((language) => {
           const isActive = language.code === locale;
@@ -98,7 +104,8 @@ export default function LanguageSwitcher() {
                   ? "bg-slate-900 text-white shadow-sm"
                   : "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
               }`}
-              role="menuitem"
+              role="menuitemradio"
+              aria-checked={isActive}
             >
               <div className="flex items-center gap-3">
                 <span
@@ -125,7 +132,7 @@ export default function LanguageSwitcher() {
 
               {isActive ? (
                 <span className="text-xs font-semibold text-slate-200">
-                  Active
+                  {t("common", "status")}
                 </span>
               ) : null}
             </button>

@@ -1,9 +1,11 @@
+import type { ReactNode } from "react";
+
 type AdminSectionLayoutProps = {
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 export default function AdminSectionLayout({
   children,
 }: AdminSectionLayoutProps) {
-  return <>{children}</>;
+  return <div className="flex flex-col gap-6">{children}</div>;
 }

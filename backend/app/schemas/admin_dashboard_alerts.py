@@ -4,53 +4,48 @@ from pydantic import BaseModel, ConfigDict
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
-class DashboardUserAlertSchema(BaseSchema):
-    user_id: int
+class SimpleUserAlertSchema(BaseSchema):
+    id: int
     full_name: str
-    unique_code: str
-    shift_number: str | None = None
-    is_active: bool
+    unique_code: str | None = None
 
 
-class DashboardVehicleIssueAlertSchema(BaseSchema):
-    vehicle_id: int
+class VehicleIssuesAlertSchema(BaseSchema):
+    id: int
     license_plate: str
     brand: str
     model: str
-    open_issues_count: int
-    in_progress_issues_count: int
-    latest_issue_created_at: datetime | None = None
+    issues_count: int
 
 
-class DashboardOccupiedVehicleSchema(BaseSchema):
+class OccupiedVehicleAlertSchema(BaseSchema):
     assignment_id: int
-    vehicle_id: int
-    license_plate: str
-    brand: str
-    model: str
-    user_id: int
-    user_name: str
+    vehicle: str
+    user: str
     started_at: datetime
 
 
 class UsersWithoutProfileResponse(BaseSchema):
-    users: list[DashboardUserAlertSchema]
+    users: list[SimpleUserAlertSchema]
 
 
 class UsersWithoutContractResponse(BaseSchema):
-    users: list[DashboardUserAlertSchema]
+    users: list[SimpleUserAlertSchema]
 
 
 class UsersWithoutDriverLicenseResponse(BaseSchema):
-    users: list[DashboardUserAlertSchema]
+    users: list[SimpleUserAlertSchema]
 
 
 class VehiclesWithOpenIssuesResponse(BaseSchema):
-    vehicles: list[DashboardVehicleIssueAlertSchema]
+    vehicles: list[VehicleIssuesAlertSchema]
 
 
 class OccupiedVehiclesResponse(BaseSchema):
-    vehicles: list[DashboardOccupiedVehicleSchema]
+    vehicles: list[OccupiedVehicleAlertSchema]

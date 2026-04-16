@@ -4,7 +4,10 @@ from pydantic import BaseModel, ConfigDict
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
 class DashboardUsersSummarySchema(BaseSchema):
@@ -44,24 +47,18 @@ class DashboardDocumentsSummarySchema(BaseSchema):
 
 class DashboardRecentIssueSchema(BaseSchema):
     id: int
-    vehicle_id: int
-    vehicle_license_plate: str
-    reported_by_user_id: int
-    reported_by_name: str
     status: str
     created_at: datetime
-    other_problems: str | None = None
+    vehicle: str
+    reported_by: str
+    problem: str | None = None
 
 
 class DashboardActiveAssignmentSchema(BaseSchema):
-    assignment_id: int
-    user_id: int
-    user_name: str
-    vehicle_id: int
-    vehicle_license_plate: str
-    vehicle_brand: str
-    vehicle_model: str
+    id: int
     started_at: datetime
+    vehicle: str
+    user: str
 
 
 class AdminDashboardSummaryResponse(BaseSchema):

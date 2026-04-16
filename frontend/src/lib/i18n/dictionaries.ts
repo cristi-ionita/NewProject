@@ -1,37 +1,4 @@
 export const dictionaries = {
-  en: {
-    common: {
-      save: "Save",
-      cancel: "Cancel",
-      delete: "Delete",
-      edit: "Edit",
-      loading: "Loading...",
-      logout: "Logout",
-      search: "Search",
-      actions: "Actions",
-      status: "Status",
-      yes: "Yes",
-      no: "No",
-    },
-    nav: {
-      dashboard: "Dashboard",
-      users: "Users",
-      vehicles: "Vehicles",
-      assignments: "Assignments",
-      issues: "Issues",
-      documents: "Documents",
-      leave: "Leave",
-      alerts: "Alerts",
-      profile: "Profile",
-      myVehicle: "My vehicle",
-      session: "Session",
-    },
-    dashboard: {
-      title: "Dashboard",
-      subtitle: "Overview of your fleet and activity",
-    },
-  },
-
   ro: {
     common: {
       save: "Salvează",
@@ -45,6 +12,7 @@ export const dictionaries = {
       status: "Status",
       yes: "Da",
       no: "Nu",
+      active: "Activ",
     },
     nav: {
       dashboard: "Dashboard",
@@ -65,6 +33,40 @@ export const dictionaries = {
     },
   },
 
+  en: {
+    common: {
+      save: "Save",
+      cancel: "Cancel",
+      delete: "Delete",
+      edit: "Edit",
+      loading: "Loading...",
+      logout: "Logout",
+      search: "Search",
+      actions: "Actions",
+      status: "Status",
+      yes: "Yes",
+      no: "No",
+      active: "Active",
+    },
+    nav: {
+      dashboard: "Dashboard",
+      users: "Users",
+      vehicles: "Vehicles",
+      assignments: "Assignments",
+      issues: "Issues",
+      documents: "Documents",
+      leave: "Leave",
+      alerts: "Alerts",
+      profile: "Profile",
+      myVehicle: "My vehicle",
+      session: "Session",
+    },
+    dashboard: {
+      title: "Dashboard",
+      subtitle: "Overview of your fleet and activity",
+    },
+  },
+
   de: {
     common: {
       save: "Speichern",
@@ -78,6 +80,7 @@ export const dictionaries = {
       status: "Status",
       yes: "Ja",
       no: "Nein",
+      active: "Aktiv",
     },
     nav: {
       dashboard: "Dashboard",
@@ -101,27 +104,27 @@ export const dictionaries = {
 
 export type Locale = keyof typeof dictionaries;
 
-export const defaultLocale: Locale = "ro";
+export const defaultLocale: Locale = "de";
 export const locales: Locale[] = ["ro", "en", "de"];
 
-type Dictionary = typeof dictionaries.en;
+type Dictionary = typeof dictionaries.ro;
 
 export type TranslationNamespace = keyof Dictionary;
 export type TranslationKey<N extends TranslationNamespace> = keyof Dictionary[N];
 
 type FlatDictionary = Record<string, Record<string, string>>;
 
-export function getTranslation(
-  locale: Locale,
-  namespace: string,
-  key: string
-): string {
-  const currentDictionary = dictionaries[locale] as FlatDictionary;
-  const fallbackDictionary = dictionaries[defaultLocale] as FlatDictionary;
+export function getTranslation<
+  N extends TranslationNamespace,
+  K extends TranslationKey<N>
+>(locale: Locale, namespace: N, key: K): string {
+  const currentDictionary = dictionaries[locale] as unknown as FlatDictionary;
+  const fallbackDictionary =
+    dictionaries[defaultLocale] as unknown as FlatDictionary;
 
   return (
-    currentDictionary[namespace]?.[key] ??
-    fallbackDictionary[namespace]?.[key] ??
-    key
+    currentDictionary[String(namespace)]?.[String(key)] ??
+    fallbackDictionary[String(namespace)]?.[String(key)] ??
+    String(key)
   );
 }

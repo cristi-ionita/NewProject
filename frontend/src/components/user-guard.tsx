@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+import LoadingCard from "@/components/ui/loading-card";
 import { getUserSession } from "@/lib/auth";
 
 export default function UserGuard({
@@ -10,29 +12,29 @@ export default function UserGuard({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [status, setStatus] = useState<"checking" | "allowed">("checking");
+  const [checked, setChecked] = useState(false);
+  const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
-    const id = window.requestAnimationFrame(() => {
-      try {
-        const session = getUserSession();
+    const session = getUserSession();
 
-        if (!session) {
-          router.replace("/login");
-          return;
-        }
+    if (!session?.unique_code) {
+      setAllowed(false);
+      setChecked(true);
+      router.replace("/login");
+      return;
+    }
 
-        setStatus("allowed");
-      } catch {
-        router.replace("/login");
-      }
-    });
-
-    return () => window.cancelAnimationFrame(id);
+    setAllowed(true);
+    setChecked(true);
   }, [router]);
 
-  if (status === "checking") {
-    return <div className="p-6 text-gray-900">Se verifică sesiunea...</div>;
+  if (!checked) {
+    return <LoadingCard />;
+  }
+
+  if (!allowed) {
+    return null;
   }
 
   return <>{children}</>;

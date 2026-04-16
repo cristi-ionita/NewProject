@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, ForeignKey, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, func, text
 from sqlalchemy import Enum as SqlEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -15,6 +15,30 @@ class AssignmentStatus(str, Enum):
 
 class VehicleAssignment(Base):
     __tablename__ = "vehicle_assignments"
+
+    __table_args__ = (
+        CheckConstraint(
+            "ended_at IS NULL OR ended_at >= started_at",
+            name="ck_vehicle_assignments_ended_at_after_started_at",
+        ),
+        CheckConstraint(
+            "(status = 'active' AND ended_at IS NULL) "
+            "OR (status = 'closed' AND ended_at IS NOT NULL)",
+            name="ck_vehicle_assignments_status_matches_ended_at",
+        ),
+        Index(
+            "ux_vehicle_assignments_active_vehicle",
+            "vehicle_id",
+            unique=True,
+            postgresql_where=text("status = 'active' AND ended_at IS NULL"),
+        ),
+        Index(
+            "ux_vehicle_assignments_active_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("status = 'active' AND ended_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
@@ -30,7 +54,11 @@ class VehicleAssignment(Base):
     )
 
     status: Mapped[AssignmentStatus] = mapped_column(
-        SqlEnum(AssignmentStatus, name="assignment_status"),
+        SqlEnum(
+            AssignmentStatus,
+            name="assignment_status",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
         default=AssignmentStatus.ACTIVE,
         nullable=False,
     )

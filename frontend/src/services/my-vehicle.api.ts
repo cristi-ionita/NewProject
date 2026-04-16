@@ -1,5 +1,13 @@
 import { api } from "@/lib/axios";
 
+export type AssignmentStatus = "active" | "closed";
+export type VehicleStatus = "active" | "in_service" | "inactive" | "sold";
+export type VehicleIssueStatus =
+  | "open"
+  | "scheduled"
+  | "in_progress"
+  | "resolved";
+
 export type MyVehicleUser = {
   id: number;
   full_name: string;
@@ -15,13 +23,13 @@ export type MyVehicleVehicle = {
   license_plate: string;
   year: number;
   vin: string | null;
-  status: string;
+  status: VehicleStatus;
   current_mileage: number;
 };
 
 export type MyVehicleAssignment = {
   id: number;
-  status: string;
+  status: AssignmentStatus;
   started_at: string;
   ended_at: string | null;
 };
@@ -49,7 +57,7 @@ export type MyVehicleHandoverEnd = {
 
 export type MyVehicleIssue = {
   id: number;
-  status: string;
+  status: VehicleIssueStatus;
   need_service_in_km: number | null;
   need_brakes: boolean;
   need_tires: boolean;
@@ -69,7 +77,16 @@ export type MyVehicleResponse = {
   open_issues: MyVehicleIssue[];
 };
 
-export async function getMyVehicle(code: string) {
-  const { data } = await api.get<MyVehicleResponse>(`/my-vehicle/${code}`);
+function buildUserHeaders(userCode: string) {
+  return {
+    "X-User-Code": userCode,
+  };
+}
+
+export async function getMyVehicle(userCode: string): Promise<MyVehicleResponse> {
+  const { data } = await api.get<MyVehicleResponse>("/my-vehicle", {
+    headers: buildUserHeaders(userCode),
+  });
+
   return data;
 }

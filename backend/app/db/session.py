@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 from functools import lru_cache
 
+from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
@@ -25,9 +26,11 @@ def get_session_local():
     )
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
     session_local = get_session_local()
+
     async with session_local() as session:
+        request.state.db = session
         try:
             yield session
         finally:

@@ -1,55 +1,74 @@
 import { api } from "@/lib/axios";
 
 export type UserAlert = {
-  user_id: number;
+  id: number;
   full_name: string;
-  unique_code: string;
-  shift_number: string;
-  is_active: boolean;
+  unique_code?: string;
 };
 
 export type VehicleIssueAlert = {
-  vehicle_id: number;
+  id: number;
   license_plate: string;
   brand: string;
   model: string;
-  open_issues_count: number;
-  in_progress_issues_count: number;
-  latest_issue_created_at: string | null;
+  issues_count: number;
 };
 
 export type OccupiedVehicle = {
   assignment_id: number;
-  vehicle_id: number;
-  license_plate: string;
-  brand: string;
-  model: string;
-  user_id: number;
-  user_name: string;
+  vehicle: string;
+  user: string;
   started_at: string;
 };
 
-export async function getUsersWithoutProfile() {
-  const { data } = await api.get("/admin-dashboard-alerts/users-without-profile");
-  return data;
+type UsersResponse = {
+  users: UserAlert[];
+};
+
+type VehiclesWithIssuesResponse = {
+  vehicles: VehicleIssueAlert[];
+};
+
+type OccupiedVehiclesResponse = {
+  vehicles: OccupiedVehicle[];
+};
+
+export async function getUsersWithoutProfile(): Promise<UserAlert[]> {
+  const { data } = await api.get<UsersResponse>(
+    "/admin-dashboard-alerts/users-without-profile"
+  );
+
+  return data.users;
 }
 
-export async function getUsersWithoutContract() {
-  const { data } = await api.get("/admin-dashboard-alerts/users-without-contract");
-  return data;
+export async function getUsersWithoutContract(): Promise<UserAlert[]> {
+  const { data } = await api.get<UsersResponse>(
+    "/admin-dashboard-alerts/users-without-contract"
+  );
+
+  return data.users;
 }
 
-export async function getUsersWithoutDriverLicense() {
-  const { data } = await api.get("/admin-dashboard-alerts/users-without-driver-license");
-  return data;
+export async function getUsersWithoutDriverLicense(): Promise<UserAlert[]> {
+  const { data } = await api.get<UsersResponse>(
+    "/admin-dashboard-alerts/users-without-driver-license"
+  );
+
+  return data.users;
 }
 
-export async function getVehiclesWithIssues() {
-  const { data } = await api.get("/admin-dashboard-alerts/vehicles-with-open-issues");
-  return data;
+export async function getVehiclesWithIssues(): Promise<VehicleIssueAlert[]> {
+  const { data } = await api.get<VehiclesWithIssuesResponse>(
+    "/admin-dashboard-alerts/vehicles-with-issues"
+  );
+
+  return data.vehicles;
 }
 
-export async function getOccupiedVehicles() {
-  const { data } = await api.get("/admin-dashboard-alerts/occupied-vehicles");
-  return data;
+export async function getOccupiedVehicles(): Promise<OccupiedVehicle[]> {
+  const { data } = await api.get<OccupiedVehiclesResponse>(
+    "/admin-dashboard-alerts/occupied-vehicles"
+  );
+
+  return data.vehicles;
 }

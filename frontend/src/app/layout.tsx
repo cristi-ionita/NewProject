@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
+import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
+
 import "./globals.css";
 
 import { I18nProvider } from "@/lib/i18n/i18n-provider";
@@ -19,7 +21,8 @@ export const metadata: Metadata = {
     default: "Cars Management",
     template: "%s | Cars Management",
   },
-  description: "Modern fleet, employees, maintenance and operations management system.",
+  description:
+    "Modern fleet, employees, maintenance and operations management system.",
   applicationName: "Cars Management",
   keywords: [
     "fleet management",
@@ -38,7 +41,7 @@ export const viewport: Viewport = {
 };
 
 type RootLayoutProps = Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
 }>;
 
 export default function RootLayout({ children }: RootLayoutProps) {

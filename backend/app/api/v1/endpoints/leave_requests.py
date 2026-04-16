@@ -1,37 +1,38 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.dependencies import (
-    ensure_user_is_active,
     get_current_admin,
-    get_user_by_code_or_404,
+    get_current_driver,
 )
 from app.db.models.leave_request import LeaveRequest, LeaveStatus
 from app.db.models.user import User
 from app.db.session import get_db
 from app.schemas.leave_request import (
-    LeaveRequestCreateResponseSchema,
     LeaveRequestCreateSchema,
+    LeaveRequestCreateResponseSchema,
     LeaveRequestItemSchema,
-    LeaveRequestListResponseSchema,
-    LeaveRequestReviewResponseSchema,
     LeaveRequestReviewSchema,
+    LeaveRequestReviewResponseSchema,
 )
 
 router = APIRouter(prefix="/leave-requests", tags=["leave-requests"])
 
 
+# =========================
+# HELPERS
+# =========================
+
 def parse_status(value: str) -> LeaveStatus:
     try:
         return LeaveStatus(value.strip().lower())
-    except ValueError as err:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid status.",
-        ) from err
+    except ValueError:
+        raise HTTPException(400, "Status invalid.")
 
 
 async def get_leave_or_404(db: AsyncSession, leave_id: int) -> LeaveRequest:
@@ -40,28 +41,29 @@ async def get_leave_or_404(db: AsyncSession, leave_id: int) -> LeaveRequest:
     ).scalar_one_or_none()
 
     if not leave:
-        raise HTTPException(status_code=404, detail="Leave request not found.")
+        raise HTTPException(404, "Leave request not found.")
 
     return leave
 
 
-@router.post(
-    "",
-    response_model=LeaveRequestCreateResponseSchema,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_leave_request(
+# =========================
+# CREATE (EMPLOYEE)
+# =========================
+
+@router.post("", response_model=LeaveRequestCreateResponseSchema)
+async def create_leave(
     payload: LeaveRequestCreateSchema,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_driver),
 ):
-    user = await get_user_by_code_or_404(payload.user_code, db)
-    ensure_user_is_active(user)
+    if payload.start_date > payload.end_date:
+        raise HTTPException(400, "Interval invalid.")
 
     leave = LeaveRequest(
         user_id=user.id,
         start_date=payload.start_date,
         end_date=payload.end_date,
-        reason=payload.reason,
+        reason=payload.reason.strip(),
         status=LeaveStatus.PENDING,
     )
 
@@ -69,82 +71,69 @@ async def create_leave_request(
     await db.commit()
     await db.refresh(leave)
 
-    return LeaveRequestCreateResponseSchema(
-        id=leave.id,
-        user_id=leave.user_id,
-        start_date=leave.start_date,
-        end_date=leave.end_date,
-        reason=leave.reason,
-        status=leave.status.value,
-        created_at=leave.created_at,
-    )
+    return LeaveRequestCreateResponseSchema.model_validate(leave)
 
 
-@router.get("/me/{code}", response_model=LeaveRequestListResponseSchema)
-async def list_my_leaves(
-    code: str,
+# =========================
+# MY LEAVES (EMPLOYEE)
+# =========================
+
+@router.get("/me")
+async def my_leaves(
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_driver),
 ):
-    user = await get_user_by_code_or_404(code, db)
-    ensure_user_is_active(user)
-
     result = await db.execute(
-        select(LeaveRequest, User)
-        .join(User, User.id == LeaveRequest.user_id)
+        select(LeaveRequest)
         .where(LeaveRequest.user_id == user.id)
         .order_by(desc(LeaveRequest.created_at))
     )
 
-    return LeaveRequestListResponseSchema(
-        requests=[
-            LeaveRequestItemSchema(
-                id=leave.id,
-                user_id=leave.user_id,
-                user_name=u.full_name,
-                user_code=u.unique_code,
-                start_date=leave.start_date,
-                end_date=leave.end_date,
-                reason=leave.reason,
-                status=leave.status.value,
-                reviewed_by_admin_id=leave.reviewed_by_admin_id,
-                reviewed_at=leave.reviewed_at,
-                created_at=leave.created_at,
-            )
-            for leave, u in result.all()
+    return {
+        "requests": [
+            LeaveRequestItemSchema.model_validate(l)
+            for l in result.scalars().all()
         ]
-    )
+    }
 
 
-@router.get("", response_model=LeaveRequestListResponseSchema)
+# =========================
+# ADMIN LIST
+# =========================
+
+@router.get("")
 async def list_all_leaves(
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(get_current_admin),
+    _: User = Depends(get_current_admin),
 ):
     result = await db.execute(
-        select(LeaveRequest, User)
+        select(LeaveRequest, User.full_name)
         .join(User, User.id == LeaveRequest.user_id)
         .order_by(desc(LeaveRequest.created_at))
     )
 
-    return LeaveRequestListResponseSchema(
-        requests=[
-            LeaveRequestItemSchema(
-                id=leave.id,
-                user_id=leave.user_id,
-                user_name=u.full_name,
-                user_code=u.unique_code,
-                start_date=leave.start_date,
-                end_date=leave.end_date,
-                reason=leave.reason,
-                status=leave.status.value,
-                reviewed_by_admin_id=leave.reviewed_by_admin_id,
-                reviewed_at=leave.reviewed_at,
-                created_at=leave.created_at,
-            )
-            for leave, u in result.all()
+    return {
+        "requests": [
+            {
+                "id": l.id,
+                "user_id": l.user_id,
+                "user_name": name,
+                "start_date": l.start_date,
+                "end_date": l.end_date,
+                "reason": l.reason,
+                "status": l.status.value,
+                "reviewed_by_admin_id": l.reviewed_by_admin_id,
+                "reviewed_at": l.reviewed_at,
+                "created_at": l.created_at,
+            }
+            for l, name in result
         ]
-    )
+    }
 
+
+# =========================
+# ADMIN REVIEW
+# =========================
 
 @router.patch("/{leave_id}", response_model=LeaveRequestReviewResponseSchema)
 async def review_leave(
@@ -155,6 +144,9 @@ async def review_leave(
 ):
     leave = await get_leave_or_404(db, leave_id)
 
+    if leave.status != LeaveStatus.PENDING:
+        raise HTTPException(400, "Leave deja procesat.")
+
     leave.status = parse_status(payload.status)
     leave.reviewed_by_admin_id = admin.id
     leave.reviewed_at = datetime.now(UTC)
@@ -162,9 +154,4 @@ async def review_leave(
     await db.commit()
     await db.refresh(leave)
 
-    return LeaveRequestReviewResponseSchema(
-        id=leave.id,
-        status=leave.status.value,
-        reviewed_by_admin_id=leave.reviewed_by_admin_id,
-        reviewed_at=leave.reviewed_at,
-    )
+    return LeaveRequestReviewResponseSchema.model_validate(leave)

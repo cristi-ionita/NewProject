@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, String, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -14,6 +14,21 @@ if TYPE_CHECKING:
 
 class User(Base):
     __tablename__ = "users"
+
+    __table_args__ = (
+        CheckConstraint(
+            "char_length(trim(full_name)) > 0",
+            name="ck_users_full_name_not_blank",
+        ),
+        CheckConstraint(
+            "char_length(trim(unique_code)) > 0",
+            name="ck_users_unique_code_not_blank",
+        ),
+        CheckConstraint(
+            "role IN ('employee', 'admin', 'mechanic')",
+            name="ck_users_role_valid",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
 

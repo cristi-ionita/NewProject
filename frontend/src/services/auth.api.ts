@@ -1,5 +1,8 @@
 import { api } from "@/lib/axios";
 
+export type AuthRole = "employee" | "mechanic" | "admin";
+export type SessionStatus = "active" | "closed";
+
 export type AdminLoginRequest = {
   password: string;
 };
@@ -18,7 +21,7 @@ export type UserLoginResponse = {
   full_name: string;
   shift_number: string | null;
   unique_code: string;
-  role: string;
+  role: AuthRole;
 };
 
 export type MechanicLoginRequest = {
@@ -30,7 +33,7 @@ export type MechanicLoginResponse = {
   user_id: number;
   full_name: string;
   unique_code: string;
-  role: string;
+  role: AuthRole;
 };
 
 export type ActiveSessionResponse = {
@@ -41,11 +44,10 @@ export type ActiveSessionResponse = {
   brand?: string;
   model?: string;
   started_at?: string;
-  status?: string;
+  status?: SessionStatus;
 };
 
 export type StartSessionPayload = {
-  code: string;
   license_plate: string;
 };
 
@@ -56,11 +58,7 @@ export type StartSessionResponse = {
   vehicle_id: number;
   license_plate: string;
   started_at: string;
-  status: string;
-};
-
-export type EndSessionPayload = {
-  code: string;
+  status: SessionStatus;
 };
 
 export type EndSessionResponse = {
@@ -68,46 +66,80 @@ export type EndSessionResponse = {
   user_id: number;
   vehicle_id: number;
   ended_at: string;
-  status: string;
+  status: SessionStatus;
 };
 
-export async function adminLogin(payload: AdminLoginRequest) {
-  const { data } = await api.post<AdminLoginResponse>("/auth/admin-login", payload);
+function buildUserHeaders(userCode: string) {
+  return {
+    "X-User-Code": userCode,
+  };
+}
+
+export async function adminLogin(
+  payload: AdminLoginRequest
+): Promise<AdminLoginResponse> {
+  const { data } = await api.post<AdminLoginResponse>(
+    "/auth/admin-login",
+    payload
+  );
+
   return data;
 }
 
-export async function userLogin(payload: UserLoginRequest) {
+export async function userLogin(
+  payload: UserLoginRequest
+): Promise<UserLoginResponse> {
   const { data } = await api.post<UserLoginResponse>("/auth/login", payload);
+
   return data;
 }
 
-export async function mechanicLogin(payload: MechanicLoginRequest) {
+export async function mechanicLogin(
+  payload: MechanicLoginRequest
+): Promise<MechanicLoginResponse> {
   const { data } = await api.post<MechanicLoginResponse>(
     "/auth/mechanic-login",
     payload
   );
+
   return data;
 }
 
-export async function getActiveSession(code: string) {
-  const { data } = await api.get<ActiveSessionResponse>(
-    `/auth/active-session/${code}`
-  );
+export async function getActiveSession(
+  userCode: string
+): Promise<ActiveSessionResponse> {
+  const { data } = await api.get<ActiveSessionResponse>("/auth/active-session", {
+    headers: buildUserHeaders(userCode),
+  });
+
   return data;
 }
 
-export async function startSession(payload: StartSessionPayload) {
+export async function startSession(
+  userCode: string,
+  payload: StartSessionPayload
+): Promise<StartSessionResponse> {
   const { data } = await api.post<StartSessionResponse>(
     "/auth/start-session",
-    payload
+    payload,
+    {
+      headers: buildUserHeaders(userCode),
+    }
   );
+
   return data;
 }
 
-export async function endSession(payload: EndSessionPayload) {
+export async function endSession(
+  userCode: string
+): Promise<EndSessionResponse> {
   const { data } = await api.post<EndSessionResponse>(
     "/auth/end-session",
-    payload
+    {},
+    {
+      headers: buildUserHeaders(userCode),
+    }
   );
+
   return data;
 }

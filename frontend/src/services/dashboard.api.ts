@@ -1,5 +1,31 @@
 import { api } from "@/lib/axios";
 
+export type VehicleStatus = "active" | "in_service" | "inactive" | "sold";
+export type AssignmentStatus = "active" | "closed";
+export type VehicleIssueStatus = "open" | "scheduled" | "in_progress" | "resolved";
+
+export type AdminDashboardRecentIssue = {
+  id: number;
+  vehicle_id: number;
+  vehicle_license_plate: string;
+  reported_by_user_id: number;
+  reported_by_name: string;
+  status: VehicleIssueStatus;
+  created_at: string;
+  other_problems: string | null;
+};
+
+export type AdminDashboardActiveAssignment = {
+  assignment_id: number;
+  user_id: number;
+  user_name: string;
+  vehicle_id: number;
+  vehicle_license_plate: string;
+  vehicle_brand: string;
+  vehicle_model: string;
+  started_at: string;
+};
+
 export type AdminDashboardSummaryResponse = {
   users: {
     total: number;
@@ -31,30 +57,14 @@ export type AdminDashboardSummaryResponse = {
     payslips: number;
     driver_licenses: number;
   };
-  recent_issues: Array<{
-    id: number;
-    vehicle_id: number;
-    vehicle_license_plate: string;
-    reported_by_user_id: number;
-    reported_by_name: string;
-    status: string;
-    created_at: string;
-    other_problems: string | null;
-  }>;
-  active_assignments: Array<{
-    assignment_id: number;
-    user_id: number;
-    user_name: string;
-    vehicle_id: number;
-    vehicle_license_plate: string;
-    vehicle_brand: string;
-    vehicle_model: string;
-    started_at: string;
-  }>;
+  recent_issues: AdminDashboardRecentIssue[];
+  active_assignments: AdminDashboardActiveAssignment[];
 };
 
-export async function getAdminDashboardSummary() {
-  const { data } =
-    await api.get<AdminDashboardSummaryResponse>("/admin-dashboard/summary");
+export async function getAdminDashboardSummary(): Promise<AdminDashboardSummaryResponse> {
+  const { data } = await api.get<AdminDashboardSummaryResponse>(
+    "/admin-dashboard/summary"
+  );
+
   return data;
 }

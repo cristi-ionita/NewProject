@@ -1,14 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { getUserSession, saveUserSession } from "@/lib/auth";
-import { extractErrorMessage } from "@/lib/error";
-import {
-  getMyProfileSummary,
-  type ProfileSummaryResponse,
-  updateMyProfile,
-} from "@/services/profile.api";
-import { useI18n } from "@/lib/i18n/use-i18n";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   BadgeCheck,
   FileText,
@@ -19,50 +11,81 @@ import {
   UserRound,
 } from "lucide-react";
 
-function normalizeIban(value: string) {
-  return value.replace(/\s+/g, "").toUpperCase();
-}
+import PageHero from "@/components/ui/page-hero";
+import HeroStatCard from "@/components/ui/hero-stat-card";
+import SectionCard from "@/components/ui/section-card";
+import LoadingCard from "@/components/ui/loading-card";
+import ErrorAlert from "@/components/ui/error-alert";
+import EmptyState from "@/components/ui/empty-state";
 
-function isValidIban(value: string) {
-  const iban = normalizeIban(value);
+import { getUserSession, saveUserSession } from "@/lib/auth";
+import { extractErrorMessage } from "@/lib/error";
+import { isApiClientError } from "@/lib/axios";
+import { useI18n } from "@/lib/i18n/use-i18n";
+import {
+  getMyProfileSummary,
+  updateMyProfile,
+  type ProfileSummaryResponse,
+} from "@/services/profile.api";
 
-  if (!iban) return true;
-  if (!/^[A-Z]{2}\d{2}[A-Z0-9]+$/.test(iban)) return false;
-  if (iban.length < 15 || iban.length > 34) return false;
+type EditSection = "account" | "profile" | "iban" | null;
 
-  const rearranged = iban.slice(4) + iban.slice(0, 4);
-  let numeric = "";
+type AddressParts = {
+  street: string;
+  streetNumber: string;
+  apartment: string;
+  postcode: string;
+};
 
-  for (const ch of rearranged) {
-    if (/[A-Z]/.test(ch)) {
-      numeric += (ch.charCodeAt(0) - 55).toString();
-    } else {
-      numeric += ch;
-    }
-  }
+type FormState = {
+  username: string;
+  pin: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  street: string;
+  streetNumber: string;
+  apartment: string;
+  postcode: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  iban: string;
+};
 
-  let remainder = 0;
-  for (const digit of numeric) {
-    remainder = (remainder * 10 + Number(digit)) % 97;
-  }
+const EMPTY_ADDRESS: AddressParts = {
+  street: "",
+  streetNumber: "",
+  apartment: "",
+  postcode: "",
+};
 
-  return remainder === 1;
+const EMPTY_FORM: FormState = {
+  username: "",
+  pin: "",
+  firstName: "",
+  lastName: "",
+  phone: "",
+  street: "",
+  streetNumber: "",
+  apartment: "",
+  postcode: "",
+  emergencyContactName: "",
+  emergencyContactPhone: "",
+  iban: "",
+};
+
+function normalizeSpaces(value: string) {
+  return value.trimStart().replace(/\s+/g, " ");
 }
 
 function toTitleCase(value: string) {
-  return value
+  return normalizeSpaces(value)
     .toLowerCase()
-    .trimStart()
-    .replace(/\s+/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function normalizeName(value: string) {
   return toTitleCase(value);
-}
-
-function normalizeText(value: string) {
-  return value.trimStart().replace(/\s+/g, " ");
 }
 
 function normalizeAddressText(value: string) {
@@ -77,215 +100,268 @@ function normalizePhone(value: string) {
   return value.replace(/[^\d+\s()-]/g, "").trimStart();
 }
 
-function cardClass() {
-  return "rounded-[22px] border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.06)]";
+function normalizeIban(value: string) {
+  return value.replace(/\s+/g, "").toUpperCase();
 }
 
-function tileClass() {
-  return "rounded-[18px] border border-slate-200 bg-slate-50/80 p-4";
+function isValidPin(value: string) {
+  if (!value) return true;
+  return /^\d{4}$/.test(value);
 }
 
-function sectionLabelClass() {
-  return "text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500";
+function isValidIban(value: string) {
+  const iban = normalizeIban(value);
+
+  if (!iban) return true;
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]+$/.test(iban)) return false;
+  if (iban.length < 15 || iban.length > 34) return false;
+
+  const rearranged = iban.slice(4) + iban.slice(0, 4);
+  let numeric = "";
+
+  for (const ch of rearranged) {
+    numeric += /[A-Z]/.test(ch) ? String(ch.charCodeAt(0) - 55) : ch;
+  }
+
+  let remainder = 0;
+  for (const digit of numeric) {
+    remainder = (remainder * 10 + Number(digit)) % 97;
+  }
+
+  return remainder === 1;
 }
 
-function displayValueClass() {
-  return "mt-2 text-sm font-medium text-slate-900";
-}
-
-function displayValueStrongClass() {
-  return "mt-2 text-sm font-semibold text-slate-900";
-}
-
-function inputClass() {
-  return "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200";
-}
-
-function ibanInputClass() {
-  return "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-mono text-sm uppercase tracking-[0.05em] text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200";
-}
-
-function buttonPrimaryClass() {
-  return "rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60";
-}
-
-function buttonSecondaryClass() {
-  return "rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
-}
-
-function formatAddress({
-  street,
-  streetNumber,
-  apartment,
-  postcode,
-}: {
-  street: string;
-  streetNumber: string;
-  apartment: string;
-  postcode: string;
-}) {
+function formatAddress(address: AddressParts) {
   const parts = [
-    street.trim() ? `Street: ${street.trim()}` : "",
-    streetNumber.trim() ? `Number: ${streetNumber.trim()}` : "",
-    apartment.trim() ? `Apartment: ${apartment.trim()}` : "",
-    postcode.trim() ? `Postcode: ${postcode.trim()}` : "",
+    address.street.trim() ? `Street: ${address.street.trim()}` : "",
+    address.streetNumber.trim() ? `Number: ${address.streetNumber.trim()}` : "",
+    address.apartment.trim() ? `Apartment: ${address.apartment.trim()}` : "",
+    address.postcode.trim() ? `Postcode: ${address.postcode.trim()}` : "",
   ].filter(Boolean);
 
   return parts.join(", ");
 }
 
-function parseAddress(address: string) {
-  if (!address?.trim()) {
-    return {
-      street: "",
-      streetNumber: "",
-      apartment: "",
-      postcode: "",
-      raw: "",
-    };
-  }
-
-  const result = {
-    street: "",
-    streetNumber: "",
-    apartment: "",
-    postcode: "",
-    raw: address,
-  };
+function parseAddress(address?: string | null): AddressParts {
+  if (!address?.trim()) return EMPTY_ADDRESS;
 
   const streetMatch = address.match(/Street:\s*([^,]+)/i);
   const numberMatch = address.match(/Number:\s*([^,]+)/i);
   const apartmentMatch = address.match(/Apartment:\s*([^,]+)/i);
   const postcodeMatch = address.match(/Postcode:\s*([^,]+)/i);
 
-  if (streetMatch) result.street = streetMatch[1].trim();
-  if (numberMatch) result.streetNumber = numberMatch[1].trim();
-  if (apartmentMatch) result.apartment = apartmentMatch[1].trim();
-  if (postcodeMatch) result.postcode = postcodeMatch[1].trim();
-
   if (!streetMatch && !numberMatch && !apartmentMatch && !postcodeMatch) {
-    result.street = address;
+    return {
+      street: address.trim(),
+      streetNumber: "",
+      apartment: "",
+      postcode: "",
+    };
   }
 
-  return result;
+  return {
+    street: streetMatch?.[1]?.trim() || "",
+    streetNumber: numberMatch?.[1]?.trim() || "",
+    apartment: apartmentMatch?.[1]?.trim() || "",
+    postcode: postcodeMatch?.[1]?.trim() || "",
+  };
+}
+
+function buildFormState(data: ProfileSummaryResponse): FormState {
+  const profile = data.employee_profile;
+  const address = parseAddress(profile?.address);
+
+  return {
+    username: data.user.unique_code || "",
+    pin: "",
+    firstName: profile?.first_name || "",
+    lastName: profile?.last_name || "",
+    phone: profile?.phone || "",
+    street: address.street,
+    streetNumber: address.streetNumber,
+    apartment: address.apartment,
+    postcode: address.postcode,
+    emergencyContactName: profile?.emergency_contact_name || "",
+    emergencyContactPhone: profile?.emergency_contact_phone || "",
+    iban: profile?.iban || "",
+  };
+}
+
+function getStatusFromError(err: unknown) {
+  if (!isApiClientError(err)) return null;
+  return err.status ?? null;
 }
 
 export default function EmployeeProfilePage() {
   const { locale } = useI18n();
 
   const [data, setData] = useState<ProfileSummaryResponse | null>(null);
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
+
   const [loading, setLoading] = useState(true);
+  const [activeEdit, setActiveEdit] = useState<EditSection>(null);
+  const [saving, setSaving] = useState<EditSection>(null);
+
   const [error, setError] = useState("");
-
-  const [editingAccount, setEditingAccount] = useState(false);
-  const [username, setUsername] = useState("");
-  const [pin, setPin] = useState("");
-  const [savingAccount, setSavingAccount] = useState(false);
-
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [phone, setPhone] = useState("");
-
-  const [street, setStreet] = useState("");
-  const [streetNumber, setStreetNumber] = useState("");
-  const [apartment, setApartment] = useState("");
-  const [postcode, setPostcode] = useState("");
-
-  const [emergencyContactName, setEmergencyContactName] = useState("");
-  const [emergencyContactPhone, setEmergencyContactPhone] = useState("");
-  const [savingProfile, setSavingProfile] = useState(false);
-
-  const [editingIban, setEditingIban] = useState(false);
-  const [iban, setIban] = useState("");
-  const [savingIban, setSavingIban] = useState(false);
   const [ibanError, setIbanError] = useState("");
+  const [profileMissing, setProfileMissing] = useState(false);
 
   function text(values: { ro: string; en: string; de: string }) {
     return values[locale];
   }
 
-  async function loadProfile() {
+  const getSessionError = useCallback(
+    () =>
+      text({
+        ro: "Sesiune utilizator invalidă.",
+        en: "Invalid user session.",
+        de: "Ungültige Benutzersitzung.",
+      }),
+    [locale]
+  );
+
+  const setField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  const hydrateState = useCallback((result: ProfileSummaryResponse) => {
+    setData(result);
+    setForm(buildFormState(result));
+    setProfileMissing(false);
+    setIbanError("");
+  }, []);
+
+  const loadProfile = useCallback(async () => {
     try {
+      setLoading(true);
+      setError("");
+
       const session = getUserSession();
 
       if (!session?.unique_code) {
-        setError(
-          text({
-            ro: "Sesiune user invalidă.",
-            en: "Invalid user session.",
-            de: "Ungültige Benutzersitzung.",
-          })
-        );
-        setLoading(false);
+        setData(null);
+        setProfileMissing(false);
+        setError(getSessionError());
         return;
       }
 
-      setError("");
       const result = await getMyProfileSummary(session.unique_code);
-      setData(result);
-
-      setUsername(result.user.unique_code || "");
-      setPin("");
-
-      setFirstName(result.employee_profile?.first_name || "");
-      setLastName(result.employee_profile?.last_name || "");
-      setPhone(result.employee_profile?.phone || "");
-
-      const parsedAddress = parseAddress(result.employee_profile?.address || "");
-      setStreet(parsedAddress.street);
-      setStreetNumber(parsedAddress.streetNumber);
-      setApartment(parsedAddress.apartment);
-      setPostcode(parsedAddress.postcode);
-
-      setEmergencyContactName(result.employee_profile?.emergency_contact_name || "");
-      setEmergencyContactPhone(result.employee_profile?.emergency_contact_phone || "");
-      setIban(result.employee_profile?.iban || "");
-      setIbanError("");
+      hydrateState(result);
     } catch (err: unknown) {
+      const status = getStatusFromError(err);
+
+      if (status === 404) {
+        setData(null);
+        setProfileMissing(true);
+        setError("");
+        return;
+      }
+
+      setProfileMissing(false);
       setError(
         extractErrorMessage(
           err,
           text({
-            ro: "Nu am putut încărca profilul",
-            en: "Could not load profile",
-            de: "Profil konnte nicht geladen werden",
+            ro: "Nu am putut încărca profilul.",
+            en: "Could not load profile.",
+            de: "Profil konnte nicht geladen werden.",
           })
         )
       );
     } finally {
       setLoading(false);
     }
-  }
+  }, [getSessionError, hydrateState, locale]);
 
   useEffect(() => {
-    loadProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale]);
+    void loadProfile();
+  }, [loadProfile]);
+
+  const profile = data?.employee_profile;
+  const documents = data?.documents_summary;
+
+  const parsedDisplayAddress = useMemo(
+    () => parseAddress(profile?.address),
+    [profile?.address]
+  );
+
+  const fullEmployeeName = useMemo(() => {
+    const first = normalizeName(form.firstName).trim();
+    const last = normalizeName(form.lastName).trim();
+
+    if (first || last) return `${first} ${last}`.trim();
+
+    if (profile?.first_name || profile?.last_name) {
+      return `${profile.first_name || ""} ${profile.last_name || ""}`.trim();
+    }
+
+    return data?.user.full_name || "-";
+  }, [data?.user.full_name, form.firstName, form.lastName, profile]);
+
+  function resetEditState(nextData?: ProfileSummaryResponse | null) {
+    if (nextData) {
+      setForm(buildFormState(nextData));
+    } else if (data) {
+      setForm(buildFormState(data));
+    }
+
+    setActiveEdit(null);
+    setError("");
+    setIbanError("");
+  }
+
+  function startEdit(section: EditSection) {
+    setActiveEdit(section);
+    setError("");
+    setIbanError("");
+  }
+
+  async function reloadAndClose() {
+    await loadProfile();
+    setActiveEdit(null);
+    setIbanError("");
+  }
 
   async function handleSaveAccount() {
+    const session = getUserSession();
+
+    if (!session?.unique_code) {
+      setError(getSessionError());
+      return;
+    }
+
+    const nextUsername = normalizeSpaces(form.username);
+    const nextPin = form.pin.trim();
+
+    if (!nextUsername) {
+      setError(
+        text({
+          ro: "Username-ul este obligatoriu.",
+          en: "Username is required.",
+          de: "Benutzername ist erforderlich.",
+        })
+      );
+      return;
+    }
+
+    if (!isValidPin(nextPin)) {
+      setError(
+        text({
+          ro: "PIN-ul trebuie să conțină exact 4 cifre.",
+          en: "PIN must contain exactly 4 digits.",
+          de: "Die PIN muss genau 4 Ziffern enthalten.",
+        })
+      );
+      return;
+    }
+
     try {
-      const session = getUserSession();
-
-      if (!session?.unique_code) {
-        setError(
-          text({
-            ro: "Sesiune user invalidă.",
-            en: "Invalid user session.",
-            de: "Ungültige Benutzersitzung.",
-          })
-        );
-        return;
-      }
-
-      setSavingAccount(true);
+      setSaving("account");
       setError("");
 
-      const nextUsername = normalizeText(username);
-
       await updateMyProfile(session.unique_code, {
-        username: nextUsername || null,
-        pin: pin.trim() || undefined,
+        username: nextUsername,
+        pin: nextPin || undefined,
       });
 
       saveUserSession({
@@ -293,688 +369,493 @@ export default function EmployeeProfilePage() {
         unique_code: nextUsername || session.unique_code,
       });
 
-      await loadProfile();
-      setEditingAccount(false);
-      setPin("");
+      await reloadAndClose();
+      setField("pin", "");
     } catch (err: unknown) {
       setError(
         extractErrorMessage(
           err,
           text({
-            ro: "Nu am putut salva datele de logare",
-            en: "Could not save login details",
-            de: "Anmeldedaten konnten nicht gespeichert werden",
+            ro: "Nu am putut salva datele de logare.",
+            en: "Could not save login details.",
+            de: "Anmeldedaten konnten nicht gespeichert werden.",
           })
         )
       );
     } finally {
-      setSavingAccount(false);
+      setSaving(null);
     }
   }
 
   async function handleSaveProfile() {
+    const session = getUserSession();
+
+    if (!session?.unique_code) {
+      setError(getSessionError());
+      return;
+    }
+
     try {
-      const session = getUserSession();
-
-      if (!session?.unique_code) {
-        setError(
-          text({
-            ro: "Sesiune user invalidă.",
-            en: "Invalid user session.",
-            de: "Ungültige Benutzersitzung.",
-          })
-        );
-        return;
-      }
-
-      setSavingProfile(true);
+      setSaving("profile");
       setError("");
 
       const formattedAddress = formatAddress({
-        street: normalizeAddressText(street),
-        streetNumber: normalizeAddressText(streetNumber),
-        apartment: normalizeAddressText(apartment),
-        postcode: normalizePostcode(postcode),
+        street: normalizeAddressText(form.street),
+        streetNumber: normalizeAddressText(form.streetNumber),
+        apartment: normalizeAddressText(form.apartment),
+        postcode: normalizePostcode(form.postcode),
       });
 
       await updateMyProfile(session.unique_code, {
-        first_name: normalizeName(firstName) || null,
-        last_name: normalizeName(lastName) || null,
-        phone: phone.trim() || null,
+        first_name: normalizeName(form.firstName) || null,
+        last_name: normalizeName(form.lastName) || null,
+        phone: form.phone.trim() || null,
         address: formattedAddress || null,
-        emergency_contact_name: normalizeName(emergencyContactName) || null,
-        emergency_contact_phone: emergencyContactPhone.trim() || null,
+        emergency_contact_name: normalizeName(form.emergencyContactName) || null,
+        emergency_contact_phone: form.emergencyContactPhone.trim() || null,
       });
 
-      await loadProfile();
-      setEditingProfile(false);
+      await reloadAndClose();
     } catch (err: unknown) {
       setError(
         extractErrorMessage(
           err,
           text({
-            ro: "Nu am putut salva datele personale",
-            en: "Could not save personal details",
-            de: "Persönliche Daten konnten nicht gespeichert werden",
+            ro: "Nu am putut salva datele personale.",
+            en: "Could not save personal details.",
+            de: "Persönliche Daten konnten nicht gespeichert werden.",
           })
         )
       );
     } finally {
-      setSavingProfile(false);
+      setSaving(null);
     }
   }
 
   async function handleSaveIban() {
+    const session = getUserSession();
+
+    if (!session?.unique_code) {
+      setError(getSessionError());
+      return;
+    }
+
+    const normalized = normalizeIban(form.iban);
+
+    if (normalized && !isValidIban(normalized)) {
+      setIbanError(
+        text({
+          ro: "IBAN invalid.",
+          en: "Invalid IBAN.",
+          de: "Ungültige IBAN.",
+        })
+      );
+      return;
+    }
+
     try {
-      const session = getUserSession();
-
-      if (!session?.unique_code) {
-        setError(
-          text({
-            ro: "Sesiune user invalidă.",
-            en: "Invalid user session.",
-            de: "Ungültige Benutzersitzung.",
-          })
-        );
-        return;
-      }
-
-      const normalized = normalizeIban(iban);
-
-      if (normalized && !isValidIban(normalized)) {
-        setIbanError(
-          text({
-            ro: "IBAN invalid.",
-            en: "Invalid IBAN.",
-            de: "Ungültige IBAN.",
-          })
-        );
-        return;
-      }
-
-      setSavingIban(true);
+      setSaving("iban");
       setError("");
       setIbanError("");
 
       await updateMyProfile(session.unique_code, {
-        first_name: normalizeName(firstName) || null,
-        last_name: normalizeName(lastName) || null,
         iban: normalized || null,
       });
 
-      await loadProfile();
-      setEditingIban(false);
+      await reloadAndClose();
     } catch (err: unknown) {
       setError(
         extractErrorMessage(
           err,
           text({
-            ro: "Nu am putut salva IBAN-ul",
-            en: "Could not save IBAN",
-            de: "IBAN konnte nicht gespeichert werden",
+            ro: "Nu am putut salva IBAN-ul.",
+            en: "Could not save IBAN.",
+            de: "IBAN konnte nicht gespeichert werden.",
           })
         )
       );
     } finally {
-      setSavingIban(false);
+      setSaving(null);
     }
   }
-
-  function resetAccountEdit() {
-    setUsername(data?.user.unique_code || "");
-    setPin("");
-    setEditingAccount(false);
-    setError("");
-  }
-
-  function resetProfileEdit() {
-    setFirstName(data?.employee_profile?.first_name || "");
-    setLastName(data?.employee_profile?.last_name || "");
-    setPhone(data?.employee_profile?.phone || "");
-
-    const parsedAddress = parseAddress(data?.employee_profile?.address || "");
-    setStreet(parsedAddress.street);
-    setStreetNumber(parsedAddress.streetNumber);
-    setApartment(parsedAddress.apartment);
-    setPostcode(parsedAddress.postcode);
-
-    setEmergencyContactName(data?.employee_profile?.emergency_contact_name || "");
-    setEmergencyContactPhone(data?.employee_profile?.emergency_contact_phone || "");
-    setEditingProfile(false);
-    setError("");
-  }
-
-  function resetIbanEdit() {
-    setIban(data?.employee_profile?.iban || "");
-    setIbanError("");
-    setEditingIban(false);
-    setError("");
-  }
-
-  const profile = data?.employee_profile;
-
-  const fullEmployeeName = useMemo(() => {
-    const fn = normalizeName(firstName).trim();
-    const ln = normalizeName(lastName).trim();
-
-    if (fn || ln) return `${fn} ${ln}`.trim();
-    if (profile?.first_name || profile?.last_name) {
-      return `${profile?.first_name || ""} ${profile?.last_name || ""}`.trim();
-    }
-    return data?.user.full_name || "-";
-  }, [firstName, lastName, profile, data?.user.full_name]);
 
   if (loading) {
+    return <LoadingCard />;
+  }
+
+  if (error && !data && !profileMissing) {
+    return <ErrorAlert message={error} />;
+  }
+
+  if (profileMissing) {
     return (
-      <div className="rounded-[24px] border border-white/60 bg-white/80 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)] backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-slate-900" />
-          <p className="text-sm font-medium text-slate-600">
-            {text({
-              ro: "Se încarcă...",
-              en: "Loading...",
-              de: "Wird geladen...",
-            })}
-          </p>
-        </div>
-      </div>
+      <EmptyState
+        title={text({
+          ro: "Profilul angajatului nu există încă",
+          en: "Employee profile does not exist yet",
+          de: "Mitarbeiterprofil existiert noch nicht",
+        })}
+        description={text({
+          ro: "Contul există, dar profilul asociat nu a fost creat încă în sistem.",
+          en: "The account exists, but the linked employee profile has not been created yet.",
+          de: "Das Konto existiert, aber das verknüpfte Mitarbeiterprofil wurde noch nicht erstellt.",
+        })}
+      />
     );
   }
 
-  if (error && !data) {
+  if (!data || !documents) {
     return (
-      <div className="rounded-[24px] border border-red-200 bg-red-50 p-6 text-sm text-red-700">
-        {error}
-      </div>
+      <EmptyState
+        title={text({
+          ro: "Nu există date disponibile",
+          en: "No data available",
+          de: "Keine Daten verfügbar",
+        })}
+      />
     );
   }
 
-  if (!data) {
-    return (
-      <div className={cardClass()}>
-        <div className="text-sm text-slate-500">
-          {text({
-            ro: "Nu există date.",
-            en: "There is no data.",
-            de: "Es sind keine Daten vorhanden.",
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  const documents = data.documents_summary;
-  const parsedDisplayAddress = parseAddress(profile?.address || "");
+  const isEditingAccount = activeEdit === "account";
+  const isEditingProfile = activeEdit === "profile";
+  const isEditingIban = activeEdit === "iban";
 
   return (
-    <div className="space-y-5 text-slate-900">
-      <section className="relative overflow-hidden rounded-[26px] border border-slate-200 bg-slate-950 p-4 sm:p-5 shadow-[0_24px_60px_rgba(15,23,42,0.18)]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.12),transparent_24%)]" />
-
-        <div className="relative">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="space-y-2.5">
-              <div>
-                <h1 className="text-[30px] font-semibold tracking-tight text-white sm:text-[34px]">
-                  {text({
-                    ro: "Profilul meu",
-                    en: "My Profile",
-                    de: "Mein Profil",
-                  })}
-                </h1>
-                <p className="mt-1.5 max-w-2xl text-sm leading-6 text-slate-300">
-                  {text({
-                    ro: "Vezi informațiile contului și datele tale personale.",
-                    en: "View your account information and personal details.",
-                    de: "Sieh deine Kontoinformationen und persönlichen Daten an.",
-                  })}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid w-full max-w-xl grid-cols-1 gap-2.5 sm:grid-cols-3">
-              <HeroStatCard
-                icon={<UserRound className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Angajat",
-                  en: "Employee",
-                  de: "Mitarbeiter",
-                })}
-                value={fullEmployeeName}
-              />
-              <HeroStatCard
-                icon={<ShieldCheck className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Tură",
-                  en: "Shift",
-                  de: "Schicht",
-                })}
-                value={data.user.shift_number || "-"}
-              />
-              <HeroStatCard
-                icon={<FileText className="h-3.5 w-3.5" />}
-                label={text({
-                  ro: "Documente",
-                  en: "Documents",
-                  de: "Dokumente",
-                })}
-                value={String(documents.total_documents)}
-              />
-            </div>
+    <div className="space-y-6">
+      <PageHero
+        icon={<UserRound className="h-7 w-7" />}
+        title={text({
+          ro: "Profilul meu",
+          en: "My Profile",
+          de: "Mein Profil",
+        })}
+        description={text({
+          ro: "Gestionează datele contului, informațiile personale și detaliile bancare.",
+          en: "Manage your account details, personal information and banking details.",
+          de: "Verwalte deine Kontodaten, persönlichen Informationen und Bankdaten.",
+        })}
+        stats={
+          <div className="grid w-full gap-3 sm:grid-cols-3">
+            <HeroStatCard
+              icon={<UserRound className="h-4 w-4" />}
+              label={text({
+                ro: "Angajat",
+                en: "Employee",
+                de: "Mitarbeiter",
+              })}
+              value={fullEmployeeName}
+            />
+            <HeroStatCard
+              icon={<ShieldCheck className="h-4 w-4" />}
+              label={text({
+                ro: "Tură",
+                en: "Shift",
+                de: "Schicht",
+              })}
+              value={data.user.shift_number || "-"}
+            />
+            <HeroStatCard
+              icon={<FileText className="h-4 w-4" />}
+              label={text({
+                ro: "Documente",
+                en: "Documents",
+                de: "Dokumente",
+              })}
+              value={documents.total_documents}
+            />
           </div>
-        </div>
-      </section>
+        }
+      />
 
-      {error && (
-        <div className="rounded-[20px] border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 shadow-sm">
-          {error}
-        </div>
-      )}
+      {error ? <ErrorAlert message={error} /> : null}
 
-      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className={cardClass()}>
-          <div className="mb-4 flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-              <UserRound className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                {text({
-                  ro: "Prezentare",
-                  en: "Overview",
-                  de: "Übersicht",
-                })}
-              </p>
-              <h2 className="text-[17px] font-semibold text-slate-950">
-                {text({
-                  ro: "Angajat",
-                  en: "Employee",
-                  de: "Mitarbeiter",
-                })}
-              </h2>
-            </div>
+      <section className="grid gap-4 xl:grid-cols-2">
+        <SectionCard
+          title={text({
+            ro: "Prezentare",
+            en: "Overview",
+            de: "Übersicht",
+          })}
+          icon={<UserRound className="h-5 w-5" />}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <InfoTile
+              label={text({ ro: "Nume", en: "Name", de: "Name" })}
+              value={fullEmployeeName}
+            />
+            <InfoTile
+              label={text({ ro: "Tură", en: "Shift", de: "Schicht" })}
+              value={data.user.shift_number || "-"}
+            />
+            <InfoTile
+              label={text({ ro: "Username", en: "Username", de: "Benutzername" })}
+              value={data.user.unique_code || "-"}
+            />
+            <InfoTile
+              label={text({
+                ro: "Documente totale",
+                en: "Total documents",
+                de: "Dokumente gesamt",
+              })}
+              value={documents.total_documents}
+            />
           </div>
+        </SectionCard>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className={tileClass()}>
-              <p className={sectionLabelClass()}>
-                {text({ ro: "Nume", en: "Name", de: "Name" })}
-              </p>
-              <p className="mt-2 text-base font-semibold text-slate-900">{fullEmployeeName}</p>
-            </div>
-
-            <div className={tileClass()}>
-              <p className={sectionLabelClass()}>
-                {text({ ro: "Tură", en: "Shift", de: "Schicht" })}
-              </p>
-              <p className="mt-2 text-base font-semibold text-slate-900">
-                {data.user.shift_number || "-"}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className={cardClass()}>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-                <KeyRound className="h-4.5 w-4.5" />
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {text({
-                    ro: "Securitate",
-                    en: "Security",
-                    de: "Sicherheit",
-                  })}
-                </p>
-                <h2 className="text-[17px] font-semibold text-slate-950">
-                  {text({
-                    ro: "Date de logare",
-                    en: "Login details",
-                    de: "Anmeldedaten",
-                  })}
-                </h2>
-              </div>
-            </div>
-
-            {!editingAccount ? (
-              <button
-                type="button"
-                onClick={() => setEditingAccount(true)}
-                className={buttonSecondaryClass()}
-              >
-                {text({
-                  ro: "Schimbă datele de logare",
-                  en: "Change login details",
-                  de: "Anmeldedaten ändern",
-                })}
-              </button>
+        <SectionCard
+          title={text({
+            ro: "Date de logare",
+            en: "Login details",
+            de: "Anmeldedaten",
+          })}
+          icon={<KeyRound className="h-5 w-5" />}
+          actions={
+            !isEditingAccount ? (
+              <ActionButton variant="secondary" onClick={() => startEdit("account")}>
+                {text({ ro: "Editează", en: "Edit", de: "Bearbeiten" })}
+              </ActionButton>
             ) : (
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveAccount}
-                  disabled={savingAccount}
-                  className={buttonPrimaryClass()}
-                >
-                  {savingAccount
+                <ActionButton onClick={handleSaveAccount} disabled={saving === "account"}>
+                  {saving === "account"
                     ? text({ ro: "Se salvează...", en: "Saving...", de: "Wird gespeichert..." })
                     : text({ ro: "Salvează", en: "Save", de: "Speichern" })}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={resetAccountEdit}
-                  disabled={savingAccount}
-                  className={buttonSecondaryClass()}
+                </ActionButton>
+                <ActionButton
+                  variant="secondary"
+                  onClick={() => resetEditState()}
+                  disabled={saving === "account"}
                 >
                   {text({ ro: "Anulează", en: "Cancel", de: "Abbrechen" })}
-                </button>
+                </ActionButton>
               </div>
-            )}
-          </div>
-
-          {!editingAccount ? (
-            <div className={tileClass()}>
-              <p className="text-sm text-slate-500">
-                {text({
-                  ro: "Datele de logare sunt ascunse.",
-                  en: "Login details are hidden.",
-                  de: "Anmeldedaten sind ausgeblendet.",
+            )
+          }
+        >
+          {!isEditingAccount ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <InfoTile
+                label={text({ ro: "Username", en: "Username", de: "Benutzername" })}
+                value={data.user.unique_code || "-"}
+              />
+              <InfoTile
+                label="PIN"
+                value={text({
+                  ro: "Ascuns pentru securitate",
+                  en: "Hidden for security",
+                  de: "Aus Sicherheitsgründen verborgen",
                 })}
-              </p>
+              />
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className={tileClass()}>
-                <p className={sectionLabelClass()}>
-                  {text({ ro: "Username", en: "Username", de: "Benutzername" })}
-                </p>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(normalizeText(e.target.value))}
-                  placeholder={text({
-                    ro: "Username",
-                    en: "Username",
-                    de: "Benutzername",
-                  })}
-                  className={inputClass()}
-                />
-              </div>
-
-              <div className={tileClass()}>
-                <p className={sectionLabelClass()}>PIN</p>
-                <input
-                  type="password"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder={text({
-                    ro: "4 cifre",
-                    en: "4 digits",
-                    de: "4 Ziffern",
-                  })}
-                  className={inputClass()}
-                />
-              </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field
+                label={text({ ro: "Username", en: "Username", de: "Benutzername" })}
+                value={form.username}
+                onChange={(value) => setField("username", normalizeSpaces(value))}
+                placeholder={text({
+                  ro: "Username",
+                  en: "Username",
+                  de: "Benutzername",
+                })}
+              />
+              <Field
+                label="PIN"
+                type="password"
+                value={form.pin}
+                onChange={(value) =>
+                  setField("pin", value.replace(/[^\d]/g, "").slice(0, 4))
+                }
+                placeholder={text({
+                  ro: "4 cifre",
+                  en: "4 digits",
+                  de: "4 Ziffern",
+                })}
+              />
             </div>
           )}
-        </div>
+        </SectionCard>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className={cardClass()}>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-                <Phone className="h-4.5 w-4.5" />
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {text({
-                    ro: "Date personale",
-                    en: "Personal details",
-                    de: "Persönliche Daten",
-                  })}
-                </p>
-                <h2 className="text-[17px] font-semibold text-slate-950">
-                  {text({
-                    ro: "Profil",
-                    en: "Profile",
-                    de: "Profil",
-                  })}
-                </h2>
-              </div>
-            </div>
-
-            {!editingProfile ? (
-              <button
-                type="button"
-                onClick={() => setEditingProfile(true)}
-                className={buttonSecondaryClass()}
-              >
+      <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <SectionCard
+          title={text({
+            ro: "Date personale",
+            en: "Personal details",
+            de: "Persönliche Daten",
+          })}
+          icon={<Phone className="h-5 w-5" />}
+          actions={
+            !isEditingProfile ? (
+              <ActionButton variant="secondary" onClick={() => startEdit("profile")}>
                 {text({ ro: "Editează", en: "Edit", de: "Bearbeiten" })}
-              </button>
+              </ActionButton>
             ) : (
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveProfile}
-                  disabled={savingProfile}
-                  className={buttonPrimaryClass()}
-                >
-                  {savingProfile
+                <ActionButton onClick={handleSaveProfile} disabled={saving === "profile"}>
+                  {saving === "profile"
                     ? text({ ro: "Se salvează...", en: "Saving...", de: "Wird gespeichert..." })
                     : text({ ro: "Salvează", en: "Save", de: "Speichern" })}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={resetProfileEdit}
-                  disabled={savingProfile}
-                  className={buttonSecondaryClass()}
+                </ActionButton>
+                <ActionButton
+                  variant="secondary"
+                  onClick={() => resetEditState()}
+                  disabled={saving === "profile"}
                 >
                   {text({ ro: "Anulează", en: "Cancel", de: "Abbrechen" })}
-                </button>
+                </ActionButton>
               </div>
-            )}
-          </div>
-
+            )
+          }
+        >
           <div className="grid gap-4 md:grid-cols-2">
-            <DetailField
+            <ProfileField
               label={text({ ro: "Prenume", en: "First name", de: "Vorname" })}
-              editing={editingProfile}
-              value={firstName}
+              editing={isEditingProfile}
+              value={form.firstName}
               displayValue={profile?.first_name || "-"}
-              onChange={(v) => setFirstName(normalizeName(v))}
+              onChange={(value) => setField("firstName", normalizeName(value))}
               placeholder="John"
             />
-            <DetailField
+            <ProfileField
               label={text({ ro: "Nume", en: "Last name", de: "Nachname" })}
-              editing={editingProfile}
-              value={lastName}
+              editing={isEditingProfile}
+              value={form.lastName}
               displayValue={profile?.last_name || "-"}
-              onChange={(v) => setLastName(normalizeName(v))}
+              onChange={(value) => setField("lastName", normalizeName(value))}
               placeholder="Doe"
             />
-            <DetailField
+            <ProfileField
               label={text({ ro: "Telefon", en: "Phone", de: "Telefon" })}
-              editing={editingProfile}
-              value={phone}
+              editing={isEditingProfile}
+              value={form.phone}
               displayValue={profile?.phone || "-"}
-              onChange={(v) => setPhone(normalizePhone(v))}
+              onChange={(value) => setField("phone", normalizePhone(value))}
               placeholder="+447..."
             />
-            <DetailField
+            <ProfileField
               label={text({ ro: "Stradă", en: "Street", de: "Straße" })}
-              editing={editingProfile}
-              value={street}
+              editing={isEditingProfile}
+              value={form.street}
               displayValue={parsedDisplayAddress.street || "-"}
-              onChange={(v) => setStreet(normalizeAddressText(v))}
+              onChange={(value) => setField("street", normalizeAddressText(value))}
               placeholder="Baker Street"
             />
-            <DetailField
+            <ProfileField
               label={text({
                 ro: "Număr stradă",
                 en: "Street number",
                 de: "Hausnummer",
               })}
-              editing={editingProfile}
-              value={streetNumber}
+              editing={isEditingProfile}
+              value={form.streetNumber}
               displayValue={parsedDisplayAddress.streetNumber || "-"}
-              onChange={(v) => setStreetNumber(normalizeAddressText(v))}
+              onChange={(value) => setField("streetNumber", normalizeAddressText(value))}
               placeholder="221B"
             />
-            <DetailField
+            <ProfileField
               label={text({ ro: "Apartament", en: "Apartment", de: "Wohnung" })}
-              editing={editingProfile}
-              value={apartment}
+              editing={isEditingProfile}
+              value={form.apartment}
               displayValue={parsedDisplayAddress.apartment || "-"}
-              onChange={(v) => setApartment(normalizeAddressText(v))}
+              onChange={(value) => setField("apartment", normalizeAddressText(value))}
               placeholder="12"
             />
-            <DetailField
+            <ProfileField
               label={text({ ro: "Cod poștal", en: "Postcode", de: "Postleitzahl" })}
-              editing={editingProfile}
-              value={postcode}
+              editing={isEditingProfile}
+              value={form.postcode}
               displayValue={parsedDisplayAddress.postcode || "-"}
-              onChange={(v) => setPostcode(normalizePostcode(v))}
+              onChange={(value) => setField("postcode", normalizePostcode(value))}
               placeholder="NW1 6XE"
             />
-            <DetailField
+            <ProfileField
               label={text({
                 ro: "Contact de urgență",
                 en: "Emergency contact",
                 de: "Notfallkontakt",
               })}
-              editing={editingProfile}
-              value={emergencyContactName}
+              editing={isEditingProfile}
+              value={form.emergencyContactName}
               displayValue={profile?.emergency_contact_name || "-"}
-              onChange={(v) => setEmergencyContactName(normalizeName(v))}
+              onChange={(value) => setField("emergencyContactName", normalizeName(value))}
               placeholder="Jane Doe"
             />
             <div className="md:col-span-2">
-              <DetailField
+              <ProfileField
                 label={text({
                   ro: "Telefon urgență",
                   en: "Emergency phone",
                   de: "Notfalltelefon",
                 })}
-                editing={editingProfile}
-                value={emergencyContactPhone}
+                editing={isEditingProfile}
+                value={form.emergencyContactPhone}
                 displayValue={profile?.emergency_contact_phone || "-"}
-                onChange={(v) => setEmergencyContactPhone(normalizePhone(v))}
+                onChange={(value) => setField("emergencyContactPhone", normalizePhone(value))}
                 placeholder="+447..."
               />
             </div>
           </div>
-        </div>
+        </SectionCard>
 
         <div className="space-y-4">
-          <div className={cardClass()}>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-                  <IdCard className="h-4.5 w-4.5" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    {text({
-                      ro: "Bancar",
-                      en: "Banking",
-                      de: "Banking",
-                    })}
-                  </p>
-                  <h2 className="text-[17px] font-semibold text-slate-950">IBAN</h2>
-                </div>
-              </div>
-
-              {!editingIban ? (
-                <button
-                  type="button"
-                  onClick={() => setEditingIban(true)}
-                  className={buttonSecondaryClass()}
-                >
+          <SectionCard
+            title="IBAN"
+            icon={<IdCard className="h-5 w-5" />}
+            actions={
+              !isEditingIban ? (
+                <ActionButton variant="secondary" onClick={() => startEdit("iban")}>
                   {text({ ro: "Editează", en: "Edit", de: "Bearbeiten" })}
-                </button>
+                </ActionButton>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={handleSaveIban}
-                    disabled={savingIban}
-                    className={buttonPrimaryClass()}
-                  >
-                    {savingIban
+                  <ActionButton onClick={handleSaveIban} disabled={saving === "iban"}>
+                    {saving === "iban"
                       ? text({ ro: "Se salvează...", en: "Saving...", de: "Wird gespeichert..." })
                       : text({ ro: "Salvează", en: "Save", de: "Speichern" })}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={resetIbanEdit}
-                    disabled={savingIban}
-                    className={buttonSecondaryClass()}
+                  </ActionButton>
+                  <ActionButton
+                    variant="secondary"
+                    onClick={() => resetEditState()}
+                    disabled={saving === "iban"}
                   >
                     {text({ ro: "Anulează", en: "Cancel", de: "Abbrechen" })}
-                  </button>
+                  </ActionButton>
                 </div>
-              )}
-            </div>
-
-            <div className={tileClass()}>
-              <p className={sectionLabelClass()}>IBAN</p>
-
-              {editingIban ? (
-                <>
-                  <input
-                    type="text"
-                    value={iban}
-                    onChange={(e) => {
-                      setIban(normalizeIban(e.target.value));
-                      if (ibanError) setIbanError("");
-                    }}
-                    placeholder="RO49AAAA1B31007593840000"
-                    className={ibanInputClass()}
-                  />
-                  {ibanError ? (
-                    <p className="mt-2 text-sm font-medium text-red-600">{ibanError}</p>
-                  ) : null}
-                </>
-              ) : (
-                <p className="mt-2 break-all font-mono text-sm text-slate-900">
-                  {profile?.iban || "-"}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className={cardClass()}>
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950 text-white">
-                <BadgeCheck className="h-4.5 w-4.5" />
-              </div>
+              )
+            }
+          >
+            {!isEditingIban ? (
+              <InfoTile label="IBAN" value={profile?.iban || "-"} mono />
+            ) : (
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  {text({
-                    ro: "Documente",
-                    en: "Documents",
-                    de: "Dokumente",
-                  })}
-                </p>
-                <h2 className="text-[17px] font-semibold text-slate-950">
-                  {text({
-                    ro: "Rezumat",
-                    en: "Summary",
-                    de: "Zusammenfassung",
-                  })}
-                </h2>
+                <Field
+                  label="IBAN"
+                  value={form.iban}
+                  onChange={(value) => {
+                    setField("iban", normalizeIban(value));
+                    if (ibanError) setIbanError("");
+                  }}
+                  placeholder="RO49AAAA1B31007593840000"
+                  mono
+                />
+                {ibanError ? (
+                  <p className="mt-3 text-sm font-medium text-red-600">{ibanError}</p>
+                ) : null}
               </div>
-            </div>
+            )}
+          </SectionCard>
 
-            <div className="grid gap-3 text-sm md:grid-cols-2">
-              <DocTile
+          <SectionCard
+            title={text({
+              ro: "Rezumat documente",
+              en: "Documents summary",
+              de: "Dokumentenzusammenfassung",
+            })}
+            icon={<BadgeCheck className="h-5 w-5" />}
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <InfoTile
                 label={text({
                   ro: "Total documente",
                   en: "Total documents",
@@ -982,7 +863,7 @@ export default function EmployeeProfilePage() {
                 })}
                 value={documents.total_documents}
               />
-              <DocTile
+              <InfoTile
                 label={text({
                   ro: "Documente personale",
                   en: "Personal documents",
@@ -990,7 +871,7 @@ export default function EmployeeProfilePage() {
                 })}
                 value={documents.personal_documents}
               />
-              <DocTile
+              <InfoTile
                 label={text({
                   ro: "Documente companie",
                   en: "Company documents",
@@ -998,7 +879,7 @@ export default function EmployeeProfilePage() {
                 })}
                 value={documents.company_documents}
               />
-              <DocTile
+              <InfoTile
                 label={text({ ro: "Contract", en: "Contract", de: "Vertrag" })}
                 value={
                   documents.has_contract
@@ -1006,15 +887,19 @@ export default function EmployeeProfilePage() {
                     : text({ ro: "Nu", en: "No", de: "Nein" })
                 }
               />
-              <DocTile
-                label={text({ ro: "Fluturaș salariu", en: "Payslip", de: "Gehaltsabrechnung" })}
+              <InfoTile
+                label={text({
+                  ro: "Fluturaș salariu",
+                  en: "Payslip",
+                  de: "Gehaltsabrechnung",
+                })}
                 value={
                   documents.has_payslip
                     ? text({ ro: "Da", en: "Yes", de: "Ja" })
                     : text({ ro: "Nu", en: "No", de: "Nein" })
                 }
               />
-              <DocTile
+              <InfoTile
                 label={text({
                   ro: "Permis auto",
                   en: "Driver license",
@@ -1027,34 +912,71 @@ export default function EmployeeProfilePage() {
                 }
               />
             </div>
-          </div>
+          </SectionCard>
         </div>
       </section>
     </div>
   );
 }
 
-function HeroStatCard({
-  icon,
+function ActionButton({
+  children,
+  onClick,
+  disabled,
+  variant = "primary",
+}: {
+  children: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  variant?: "primary" | "secondary";
+}) {
+  const className =
+    variant === "primary"
+      ? "rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+      : "rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
+
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className={className}>
+      {children}
+    </button>
+  );
+}
+
+function Field({
   label,
   value,
+  onChange,
+  placeholder,
+  type = "text",
+  mono = false,
 }: {
-  icon: React.ReactNode;
   label: string;
   value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  type?: string;
+  mono?: boolean;
 }) {
   return (
-    <div className="rounded-[18px] border border-white/10 bg-white/5 p-3 backdrop-blur-sm">
-      <div className="flex items-center gap-2 text-slate-300">
-        {icon}
-        <span className="text-[10px] uppercase tracking-[0.14em]">{label}</span>
-      </div>
-      <p className="mt-2.5 line-clamp-2 text-sm font-semibold text-white">{value}</p>
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className={[
+          "mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200",
+          mono ? "font-mono uppercase tracking-[0.05em]" : "",
+        ].join(" ")}
+      />
     </div>
   );
 }
 
-function DetailField({
+function ProfileField({
   label,
   editing,
   value,
@@ -1069,35 +991,35 @@ function DetailField({
   onChange: (value: string) => void;
   placeholder: string;
 }) {
-  return (
-    <div>
-      <p className={sectionLabelClass()}>{label}</p>
-      {editing ? (
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          className={inputClass()}
-        />
-      ) : (
-        <p className={displayValueClass()}>{displayValue}</p>
-      )}
-    </div>
+  return editing ? (
+    <Field label={label} value={value} onChange={onChange} placeholder={placeholder} />
+  ) : (
+    <InfoTile label={label} value={displayValue} />
   );
 }
 
-function DocTile({
+function InfoTile({
   label,
   value,
+  mono = false,
 }: {
   label: string;
   value: string | number;
+  mono?: boolean;
 }) {
   return (
-    <div className={tileClass()}>
-      <p className={sectionLabelClass()}>{label}</p>
-      <p className={displayValueStrongClass()}>{value}</p>
+    <div className="rounded-[18px] border border-slate-200 bg-slate-50/80 p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </p>
+      <p
+        className={[
+          "mt-2 break-words text-sm font-semibold text-slate-900",
+          mono ? "font-mono" : "",
+        ].join(" ")}
+      >
+        {value}
+      </p>
     </div>
   );
 }

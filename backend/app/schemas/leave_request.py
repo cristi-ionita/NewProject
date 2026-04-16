@@ -4,11 +4,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BaseSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        from_attributes=True,
+    )
 
 
 class LeaveRequestCreateSchema(BaseSchema):
-    user_code: str = Field(..., min_length=1, max_length=50)
     start_date: date
     end_date: date
     reason: str | None = None
@@ -18,6 +20,7 @@ class LeaveRequestCreateSchema(BaseSchema):
     def clean_reason(cls, value: str | None) -> str | None:
         if value is None:
             return None
+
         cleaned = value.strip()
         return cleaned or None
 
@@ -49,7 +52,7 @@ class LeaveRequestItemSchema(BaseSchema):
     id: int
     user_id: int
     user_name: str
-    user_code: str
+    user_code: str | None = None
     start_date: date
     end_date: date
     reason: str | None = None

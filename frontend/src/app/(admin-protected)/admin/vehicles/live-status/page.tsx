@@ -6,24 +6,44 @@ import {
   type VehicleLiveStatusItem,
 } from "@/services/vehicles.api";
 import { useI18n } from "@/lib/i18n/use-i18n";
+import {
+  CarFront,
+  ClipboardList,
+  RefreshCw,
+  Settings2,
+  UserRound,
+  Wrench,
+} from "lucide-react";
+
+import InfoRow from "@/components/ui/info-row";
+import PageHero from "@/components/ui/page-hero";
+import HeroStatCard from "@/components/ui/hero-stat-card";
+import LoadingCard from "@/components/ui/loading-card";
+import ErrorAlert from "@/components/ui/error-alert";
+import EmptyState from "@/components/ui/empty-state";
 
 function extractErrorMessage(error: unknown): string {
   const err = error as {
-    response?: {
-      data?: {
-        detail?: string | Array<{ msg?: string }> | { msg?: string };
-      };
-    };
+    response?: { data?: { detail?: unknown } };
   };
-
   const detail = err?.response?.data?.detail;
 
   if (!detail) return "Failed to load live status.";
   if (typeof detail === "string") return detail;
-  if (Array.isArray(detail)) return detail.map((item) => item?.msg || "Error").join(", ");
-  if (typeof detail === "object") return detail.msg || "Error";
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item: { msg?: string }) => item?.msg || "Error")
+      .join(", ");
+  }
+  if (typeof detail === "object" && detail !== null && "msg" in detail) {
+    return (detail as { msg?: string }).msg || "Error";
+  }
 
   return "Failed to load live status.";
+}
+
+function cn(...classes: Array<string | false | null | undefined>) {
+  return classes.filter(Boolean).join(" ");
 }
 
 export default function VehicleLiveStatusPage() {
@@ -47,8 +67,9 @@ export default function VehicleLiveStatusPage() {
       }
 
       setError("");
+
       const data = await getVehicleLiveStatus();
-      setVehicles(data.vehicles);
+      setVehicles(data?.vehicles ?? []);
     } catch (err) {
       setError(extractErrorMessage(err));
     } finally {
@@ -62,7 +83,8 @@ export default function VehicleLiveStatusPage() {
   }, []);
 
   const occupiedCount = useMemo(
-    () => vehicles.filter((vehicle) => vehicle.availability === "occupied").length,
+    () =>
+      vehicles.filter((vehicle) => vehicle.availability === "occupied").length,
     [vehicles]
   );
 
@@ -72,7 +94,9 @@ export default function VehicleLiveStatusPage() {
   );
 
   const serviceCount = useMemo(
-    () => vehicles.filter((vehicle) => vehicle.vehicle_status === "in_service").length,
+    () =>
+      vehicles.filter((vehicle) => vehicle.vehicle_status === "in_service")
+        .length,
     [vehicles]
   );
 
@@ -121,40 +145,33 @@ export default function VehicleLiveStatusPage() {
   }
 
   if (loading) {
-    return (
-      <div className="section-card">
-        <p className="text-sm text-slate-500">{t("common", "loading")}</p>
-      </div>
-    );
+    return <LoadingCard />;
   }
 
   return (
     <div className="space-y-6">
-      <div className="page-header">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="page-title">
-              {text({
-                ro: "Status live vehicule",
-                en: "Vehicle live status",
-                de: "Fahrzeug-Livestatus",
-              })}
-            </h1>
-            <p className="page-description">
-              {text({
-                ro: "Vezi instant disponibilitatea și alocările active din flotă.",
-                en: "Instantly see fleet availability and active assignments.",
-                de: "Sieh sofort Verfügbarkeit und aktive Zuweisungen der Flotte.",
-              })}
-            </p>
-          </div>
-
+      <PageHero
+        icon={<CarFront className="h-7 w-7" />}
+        title={text({
+          ro: "Status live vehicule",
+          en: "Vehicle live status",
+          de: "Fahrzeug-Livestatus",
+        })}
+        description={text({
+          ro: "Vezi instant disponibilitatea și alocările active din flotă.",
+          en: "Instantly see fleet availability and active assignments.",
+          de: "Sieh sofort Verfügbarkeit und aktive Zuweisungen der Flotte.",
+        })}
+        actions={
           <button
             type="button"
             onClick={() => loadData(true)}
             disabled={refreshing}
-            className="btn-secondary disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_16px_rgba(0,0,0,0.25)] transition-all duration-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
+            <RefreshCw
+              className={cn("h-4 w-4", refreshing && "animate-spin")}
+            />
             {refreshing
               ? t("common", "loading")
               : text({
@@ -163,58 +180,64 @@ export default function VehicleLiveStatusPage() {
                   de: "Aktualisieren",
                 })}
           </button>
-        </div>
-      </div>
+        }
+        stats={
+          <div className="grid w-full gap-3 sm:grid-cols-3">
+            <HeroStatCard
+              icon={<ClipboardList className="h-4 w-4" />}
+              label={text({
+                ro: "Total vehicule",
+                en: "Total vehicles",
+                de: "Gesamtfahrzeuge",
+              })}
+              value={vehicles.length}
+            />
+            <HeroStatCard
+              icon={<UserRound className="h-4 w-4" />}
+              label={text({
+                ro: "Ocupate",
+                en: "Occupied",
+                de: "Belegt",
+              })}
+              value={occupiedCount}
+            />
+            <HeroStatCard
+              icon={<Wrench className="h-4 w-4" />}
+              label={text({
+                ro: "În service",
+                en: "In service",
+                de: "Im Service",
+              })}
+              value={`${serviceCount} / ${text({
+                ro: "Libere",
+                en: "Free",
+                de: "Frei",
+              })}: ${freeCount}`}
+            />
+          </div>
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="stat-card">
-          <p className="card-title">
-            {text({ ro: "Total vehicule", en: "Total vehicles", de: "Gesamtfahrzeuge" })}
-          </p>
-          <p className="card-value">{vehicles.length}</p>
-        </div>
-
-        <div className="stat-card">
-          <p className="card-title">
-            {text({ ro: "Ocupate", en: "Occupied", de: "Belegt" })}
-          </p>
-          <p className="card-value">{occupiedCount}</p>
-        </div>
-
-        <div className="stat-card">
-          <p className="card-title">
-            {text({ ro: "În service", en: "In service", de: "Im Service" })}
-          </p>
-          <p className="card-value">{serviceCount}</p>
-          <p className="mt-2 text-sm text-slate-500">
-            {text({ ro: "Libere", en: "Free", de: "Frei" })}: {freeCount}
-          </p>
-        </div>
-      </div>
-
-      {error ? (
-        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      ) : null}
+      {error ? <ErrorAlert message={error} /> : null}
 
       {vehicles.length === 0 ? (
-        <div className="section-card">
-          <p className="text-sm text-slate-500">
-            {text({
-              ro: "Nu există vehicule.",
-              en: "There are no vehicles.",
-              de: "Es gibt keine Fahrzeuge.",
-            })}
-          </p>
-        </div>
+        <EmptyState
+          title={text({
+            ro: "Nu există vehicule.",
+            en: "There are no vehicles.",
+            de: "Es gibt keine Fahrzeuge.",
+          })}
+        />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {vehicles.map((vehicle) => (
-            <section key={vehicle.vehicle_id} className="section-card">
-              <div className="mb-4 flex items-start justify-between gap-3">
+            <div
+              key={vehicle.vehicle_id}
+              className="rounded-[28px] border border-white/10 bg-gradient-to-b from-white to-slate-50 p-5 shadow-[0_24px_70px_rgba(0,0,0,0.28)] backdrop-blur-xl"
+            >
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-semibold text-slate-900">
+                  <h2 className="text-lg font-semibold text-slate-950">
                     {vehicle.license_plate}
                   </h2>
                   <p className="mt-1 text-sm text-slate-500">
@@ -223,96 +246,68 @@ export default function VehicleLiveStatusPage() {
                 </div>
 
                 <span
-                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${getAvailabilityClass(
-                    vehicle.availability
-                  )}`}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs font-medium",
+                    getAvailabilityClass(vehicle.availability)
+                  )}
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
                   {getAvailabilityLabel(vehicle.availability)}
                 </span>
               </div>
 
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-slate-500">
-                    {text({
-                      ro: "Status vehicul",
-                      en: "Vehicle status",
-                      de: "Fahrzeugstatus",
-                    })}
-                  </span>
+              <div className="mt-4 grid gap-3">
+                <InfoRow
+                  icon={<Settings2 className="h-4 w-4 text-slate-400" />}
+                  label={text({
+                    ro: "Status",
+                    en: "Status",
+                    de: "Status",
+                  })}
+                  value={
+                    <span
+                      className={cn(
+                        "rounded-full border px-2.5 py-1 text-xs font-medium",
+                        getVehicleStatusClass(vehicle.vehicle_status)
+                      )}
+                    >
+                      {getVehicleStatusLabel(vehicle.vehicle_status)}
+                    </span>
+                  }
+                />
 
-                  <span
-                    className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${getVehicleStatusClass(
-                      vehicle.vehicle_status
-                    )}`}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" />
-                    {getVehicleStatusLabel(vehicle.vehicle_status)}
-                  </span>
-                </div>
+                <InfoRow
+                  icon={<UserRound className="h-4 w-4 text-slate-400" />}
+                  label={text({
+                    ro: "Utilizator",
+                    en: "User",
+                    de: "Benutzer",
+                  })}
+                  value={vehicle.assigned_to_name || "—"}
+                />
 
-                {vehicle.assigned_to_name ? (
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      {text({
-                        ro: "Alocare activă",
-                        en: "Active assignment",
-                        de: "Aktive Zuweisung",
-                      })}
-                    </p>
-
-                    <div className="mt-3 space-y-2">
-                      <p className="text-sm text-slate-900">
-                        <span className="font-medium">
-                          {text({
-                            ro: "Utilizator",
-                            en: "User",
-                            de: "Benutzer",
-                          })}
-                          :
-                        </span>{" "}
-                        {vehicle.assigned_to_name}
-                      </p>
-
-                      <p className="text-sm text-slate-700">
-                        <span className="font-medium">
-                          {text({
-                            ro: "Tură",
-                            en: "Shift",
-                            de: "Schicht",
-                          })}
-                          :
-                        </span>{" "}
-                        {vehicle.assigned_to_shift_number || "—"}
-                      </p>
-
-                      <p className="text-sm text-slate-700">
-                        <span className="font-medium">
-                          {text({
-                            ro: "Assignment ID",
-                            en: "Assignment ID",
-                            de: "Zuweisungs-ID",
-                          })}
-                          :
-                        </span>{" "}
-                        {vehicle.active_assignment_id || "—"}
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                    {text({
-                      ro: "Nicio alocare activă.",
-                      en: "No active assignment.",
-                      de: "Keine aktive Zuweisung.",
-                    })}
-                  </div>
-                )}
+                <InfoRow
+                  icon={<ClipboardList className="h-4 w-4 text-slate-400" />}
+                  label={text({
+                    ro: "Schimb",
+                    en: "Shift",
+                    de: "Schicht",
+                  })}
+                  value={vehicle.assigned_to_shift_number || "—"}
+                />
               </div>
-            </section>
+
+              {!vehicle.assigned_to_name ? (
+                <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                  {text({
+                    ro: "Nicio alocare activă",
+                    en: "No active assignment",
+                    de: "Keine aktive Zuweisung",
+                  })}
+                </div>
+              ) : null}
+            </div>
           ))}
-        </div>
+        </section>
       )}
     </div>
   );

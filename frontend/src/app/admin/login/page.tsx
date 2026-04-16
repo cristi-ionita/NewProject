@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 
+const LOGIN_ROUTE = "/login";
+
 export default function AdminLoginRedirectPage() {
-  redirect("/login");
+  redirect(LOGIN_ROUTE);
 }

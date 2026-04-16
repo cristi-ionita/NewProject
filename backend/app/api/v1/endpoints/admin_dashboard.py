@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,177 +11,191 @@ from app.db.models.vehicle import Vehicle, VehicleStatus
 from app.db.models.vehicle_assignment import AssignmentStatus, VehicleAssignment
 from app.db.models.vehicle_issue import VehicleIssue, VehicleIssueStatus
 from app.db.session import get_db
-from app.schemas.admin_dashboard import (
-    AdminDashboardSummaryResponse,
-    DashboardActiveAssignmentSchema,
-    DashboardAssignmentsSummarySchema,
-    DashboardDocumentsSummarySchema,
-    DashboardIssuesSummarySchema,
-    DashboardRecentIssueSchema,
-    DashboardUsersSummarySchema,
-    DashboardVehiclesSummarySchema,
-)
 
 router = APIRouter(prefix="/admin-dashboard", tags=["admin-dashboard"])
 
 
-async def count_rows(
-    db: AsyncSession,
-    model_field,
-    *conditions,
-) -> int:
-    query = select(func.count(model_field))
+# =========================
+# HELPERS
+# =========================
+
+async def count(db: AsyncSession, model, *conditions) -> int:
+    query = select(func.count(model))
+
     if conditions:
         query = query.where(*conditions)
+
     return int(await db.scalar(query) or 0)
 
 
-@router.get("/summary", response_model=AdminDashboardSummaryResponse)
-async def get_admin_dashboard_summary(
+# =========================
+# SUMMARY
+# =========================
+
+@router.get("/summary")
+async def dashboard_summary(
     db: AsyncSession = Depends(get_db),
-    _: bool = Depends(get_current_admin),
-) -> AdminDashboardSummaryResponse:
-    users_total = await count_rows(db, User.id)
-    users_active = await count_rows(db, User.id, User.is_active.is_(True))
-    users_inactive = await count_rows(db, User.id, User.is_active.is_(False))
+    _: object = Depends(get_current_admin),
+):
+    # 🔹 USERS
+    users_total = await count(db, User.id)
+    users_active = await count(db, User.id, User.is_active.is_(True))
+    users_inactive = await count(db, User.id, User.is_active.is_(False))
 
-    vehicles_total = await count_rows(db, Vehicle.id)
-    vehicles_active = await count_rows(db, Vehicle.id, Vehicle.status == VehicleStatus.ACTIVE)
-    vehicles_in_service = await count_rows(
-        db, Vehicle.id, Vehicle.status == VehicleStatus.IN_SERVICE
-    )
-    vehicles_inactive = await count_rows(db, Vehicle.id, Vehicle.status == VehicleStatus.INACTIVE)
-    vehicles_sold = await count_rows(db, Vehicle.id, Vehicle.status == VehicleStatus.SOLD)
+    # 🔹 VEHICLES
+    vehicles_total = await count(db, Vehicle.id)
+    vehicles_active = await count(db, Vehicle.id, Vehicle.status == VehicleStatus.ACTIVE)
+    vehicles_in_service = await count(db, Vehicle.id, Vehicle.status == VehicleStatus.IN_SERVICE)
+    vehicles_inactive = await count(db, Vehicle.id, Vehicle.status == VehicleStatus.INACTIVE)
+    vehicles_sold = await count(db, Vehicle.id, Vehicle.status == VehicleStatus.SOLD)
 
-    assignments_active = await count_rows(
+    # 🔹 ASSIGNMENTS
+    assignments_active = await count(
         db,
         VehicleAssignment.id,
         VehicleAssignment.status == AssignmentStatus.ACTIVE,
     )
-    assignments_closed = await count_rows(
+
+    assignments_closed = await count(
         db,
         VehicleAssignment.id,
         VehicleAssignment.status == AssignmentStatus.CLOSED,
     )
 
-    issues_open = await count_rows(
-        db,
-        VehicleIssue.id,
-        VehicleIssue.status == VehicleIssueStatus.OPEN,
-    )
-    issues_in_progress = await count_rows(
+    # 🔹 ISSUES
+    issues_total = await count(db, VehicleIssue.id)
+    issues_open = await count(db, VehicleIssue.id, VehicleIssue.status == VehicleIssueStatus.OPEN)
+    issues_in_progress = await count(
         db,
         VehicleIssue.id,
         VehicleIssue.status == VehicleIssueStatus.IN_PROGRESS,
     )
-    issues_resolved = await count_rows(
+    issues_resolved = await count(
         db,
         VehicleIssue.id,
         VehicleIssue.status == VehicleIssueStatus.RESOLVED,
     )
-    issues_total = await count_rows(db, VehicleIssue.id)
 
-    documents_total = await count_rows(db, Document.id)
-    documents_personal = await count_rows(
+    # 🔹 DOCUMENTS
+    documents_total = await count(db, Document.id)
+    documents_personal = await count(
         db,
         Document.id,
         Document.category == DocumentCategory.PERSONAL,
     )
-    documents_company = await count_rows(
+    documents_company = await count(
         db,
         Document.id,
         Document.category == DocumentCategory.COMPANY,
     )
-    documents_contracts = await count_rows(
+    documents_contracts = await count(
         db,
         Document.id,
         Document.type == DocumentType.CONTRACT,
     )
-    documents_payslips = await count_rows(
+    documents_payslips = await count(
         db,
         Document.id,
         Document.type == DocumentType.PAYSLIP,
     )
-    documents_driver_licenses = await count_rows(
+    documents_driver = await count(
         db,
         Document.id,
         Document.type == DocumentType.DRIVER_LICENSE,
     )
 
-    recent_issues_result = await db.execute(
-        select(VehicleIssue, Vehicle, User)
-        .join(Vehicle, Vehicle.id == VehicleIssue.vehicle_id)
-        .join(User, User.id == VehicleIssue.reported_by_user_id)
-        .order_by(VehicleIssue.created_at.desc())
-        .limit(5)
-    )
-    recent_issue_rows = recent_issues_result.all()
+    # =========================
+    # RECENT ISSUES (NO N+1)
+    # =========================
 
-    active_assignments_result = await db.execute(
-        select(VehicleAssignment, User, Vehicle)
-        .join(User, User.id == VehicleAssignment.user_id)
-        .join(Vehicle, Vehicle.id == VehicleAssignment.vehicle_id)
-        .where(VehicleAssignment.status == AssignmentStatus.ACTIVE)
-        .order_by(VehicleAssignment.started_at.desc())
-        .limit(10)
-    )
-    active_assignment_rows = active_assignments_result.all()
+    recent_issues = (
+        await db.execute(
+            select(
+                VehicleIssue.id,
+                VehicleIssue.status,
+                VehicleIssue.created_at,
+                VehicleIssue.other_problems,
+                Vehicle.license_plate,
+                User.full_name,
+            )
+            .join(Vehicle, Vehicle.id == VehicleIssue.vehicle_id)
+            .join(User, User.id == VehicleIssue.reported_by_user_id)
+            .order_by(VehicleIssue.created_at.desc())
+            .limit(5)
+        )
+    ).all()
 
-    return AdminDashboardSummaryResponse(
-        users=DashboardUsersSummarySchema(
-            total=users_total,
-            active=users_active,
-            inactive=users_inactive,
-        ),
-        vehicles=DashboardVehiclesSummarySchema(
-            total=vehicles_total,
-            active=vehicles_active,
-            in_service=vehicles_in_service,
-            inactive=vehicles_inactive,
-            sold=vehicles_sold,
-        ),
-        assignments=DashboardAssignmentsSummarySchema(
-            active=assignments_active,
-            closed=assignments_closed,
-        ),
-        issues=DashboardIssuesSummarySchema(
-            open=issues_open,
-            in_progress=issues_in_progress,
-            resolved=issues_resolved,
-            total=issues_total,
-        ),
-        documents=DashboardDocumentsSummarySchema(
-            total=documents_total,
-            personal=documents_personal,
-            company=documents_company,
-            contracts=documents_contracts,
-            payslips=documents_payslips,
-            driver_licenses=documents_driver_licenses,
-        ),
-        recent_issues=[
-            DashboardRecentIssueSchema(
-                id=issue.id,
-                vehicle_id=issue.vehicle_id,
-                vehicle_license_plate=vehicle.license_plate,
-                reported_by_user_id=user.id,
-                reported_by_name=user.full_name,
-                status=issue.status.value if hasattr(issue.status, "value") else str(issue.status),
-                created_at=issue.created_at,
-                other_problems=issue.other_problems,
+    # =========================
+    # ACTIVE ASSIGNMENTS
+    # =========================
+
+    active_assignments = (
+        await db.execute(
+            select(
+                VehicleAssignment.id,
+                VehicleAssignment.started_at,
+                Vehicle.license_plate,
+                Vehicle.brand,
+                Vehicle.model,
+                User.full_name,
             )
-            for issue, vehicle, user in recent_issue_rows
+            .join(User, User.id == VehicleAssignment.user_id)
+            .join(Vehicle, Vehicle.id == VehicleAssignment.vehicle_id)
+            .where(VehicleAssignment.status == AssignmentStatus.ACTIVE)
+            .order_by(VehicleAssignment.started_at.desc())
+            .limit(10)
+        )
+    ).all()
+
+    return {
+        "users": {
+            "total": users_total,
+            "active": users_active,
+            "inactive": users_inactive,
+        },
+        "vehicles": {
+            "total": vehicles_total,
+            "active": vehicles_active,
+            "in_service": vehicles_in_service,
+            "inactive": vehicles_inactive,
+            "sold": vehicles_sold,
+        },
+        "assignments": {
+            "active": assignments_active,
+            "closed": assignments_closed,
+        },
+        "issues": {
+            "total": issues_total,
+            "open": issues_open,
+            "in_progress": issues_in_progress,
+            "resolved": issues_resolved,
+        },
+        "documents": {
+            "total": documents_total,
+            "personal": documents_personal,
+            "company": documents_company,
+            "contracts": documents_contracts,
+            "payslips": documents_payslips,
+            "driver_licenses": documents_driver,
+        },
+        "recent_issues": [
+            {
+                "id": i.id,
+                "status": i.status.value,
+                "created_at": i.created_at,
+                "vehicle": i.license_plate,
+                "reported_by": i.full_name,
+                "problem": i.other_problems,
+            }
+            for i in recent_issues
         ],
-        active_assignments=[
-            DashboardActiveAssignmentSchema(
-                assignment_id=assignment.id,
-                user_id=user.id,
-                user_name=user.full_name,
-                vehicle_id=vehicle.id,
-                vehicle_license_plate=vehicle.license_plate,
-                vehicle_brand=vehicle.brand,
-                vehicle_model=vehicle.model,
-                started_at=assignment.started_at,
-            )
-            for assignment, user, vehicle in active_assignment_rows
+        "active_assignments": [
+            {
+                "id": a.id,
+                "started_at": a.started_at,
+                "vehicle": f"{a.brand} {a.model} ({a.license_plate})",
+                "user": a.full_name,
+            }
+            for a in active_assignments
         ],
-    )
+    }
